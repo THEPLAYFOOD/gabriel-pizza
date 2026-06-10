@@ -70,8 +70,14 @@ function renderStoreStatus() {
   const banner = $('#storeStatusBanner');
   if (!banner) return;
   banner.className = `store-status-banner ${store.isOpen ? 'open' : 'closed'}`;
-  banner.textContent = store.isOpen ? 'aberta para pedidos' : (store.closedMessage || 'Estamos fechados no momento. Pedidos online indisponiveis.');
-  document.querySelectorAll('.status-pill').forEach(item => { item.textContent = store.isOpen ? 'aberta para pedidos' : 'Fechado agora'; });
+  banner.setAttribute('translate', 'no');
+  banner.classList.add('notranslate');
+  banner.textContent = store.isOpen ? 'Aberta para pedidos' : (store.closedMessage || 'Estamos fechados no momento. Pedidos online indisponiveis.');
+  document.querySelectorAll('.status-pill').forEach(item => {
+    item.setAttribute('translate', 'no');
+    item.classList.add('notranslate');
+    item.textContent = store.isOpen ? 'Aberta para pedidos' : 'Fechado agora';
+  });
   document.querySelectorAll('.brand strong, .profile-row strong').forEach(item => { item.textContent = store.name; });
   document.querySelector('.admin-session-bar strong') && (document.querySelector('.admin-session-bar strong').textContent = `${store.name} Admin`);
   document.querySelector('.brand small') && (document.querySelector('.brand small').textContent = store.description || 'Pizzaria artesanal');
