@@ -23,6 +23,14 @@ RESEND_FROM=Gabriel Pizza <onboarding@resend.dev>
 
 Se usar outro remetente, configure um dominio/remetente verificado na Resend e coloque em `RESEND_FROM`.
 
+Sem dominio, se a Resend bloquear o envio, voce pode ativar temporariamente:
+
+```text
+GABRIEL_LOG_RECOVERY_CODES=true
+```
+
+Com isso, quando o envio por e-mail falhar, o codigo de recuperacao aparece nos logs do Render. Depois de recuperar o acesso, volte para `false`.
+
 O SMTP do Gmail pode ficar como fallback, mas em alguns deploys gratuitos o acesso SMTP pode falhar:
 
 ```text

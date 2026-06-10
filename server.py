@@ -332,6 +332,9 @@ def send_security_email(email, code):
                 pass
     return False
 
+def should_log_recovery_codes():
+    return str(os.environ.get('GABRIEL_LOG_RECOVERY_CODES') or '').strip().lower() in {'1', 'true', 'sim', 'yes'}
+
 def request_admin_password_code(payload):
     email = str(payload.get('email') or '').strip().lower()
     credentials = admin_credentials()
@@ -350,7 +353,11 @@ def request_admin_password_code(payload):
     print(f'Password recovery emailSent={email_sent}', flush=True)
     response = {'ok': True, 'email': credentials['email'], 'emailSent': email_sent}
     if not email_sent:
-        response['message'] = 'Nao foi possivel enviar o codigo por e-mail. Configure RESEND_API_KEY no Render ou confira o SMTP.'
+        if should_log_recovery_codes():
+            print(f'Password recovery code for {credentials["email"]}: {code}', flush=True)
+            response['message'] = 'Nao foi possivel enviar por e-mail. O codigo temporario foi registrado nos logs do Render.'
+        else:
+            response['message'] = 'Nao foi possivel enviar o codigo por e-mail. Configure RESEND_API_KEY no Render ou confira o SMTP.'
         if not os.environ.get('RENDER'):
             response['devCode'] = code
             response['message'] = 'SMTP nao configurado. Codigo exibido apenas para teste local.'
@@ -395,7 +402,11 @@ def request_admin_email_code(payload):
         conn.execute('INSERT INTO admin_email_resets (current_email, new_email, code, expires_at) VALUES (?, ?, ?, ?)', (credentials['email'], new_email, code, expires_at))
     result = {'ok': True, 'emailSent': sent, 'newEmail': new_email}
     if not sent:
-        result['message'] = 'Nao foi possivel enviar o codigo por e-mail. Configure RESEND_API_KEY no Render ou confira o SMTP.'
+        if should_log_recovery_codes():
+            print(f'Admin email change code for {new_email}: {code}', flush=True)
+            result['message'] = 'Nao foi possivel enviar por e-mail. O codigo temporario foi registrado nos logs do Render.'
+        else:
+            result['message'] = 'Nao foi possivel enviar o codigo por e-mail. Configure RESEND_API_KEY no Render ou confira o SMTP.'
         if not os.environ.get('RENDER'):
             result['devCode'] = code
     return result
