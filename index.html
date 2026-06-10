@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gabriel Pizza | Cardapio Digital</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=google-print-categories" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#inicio" aria-label="Gabriel Pizza"><span class="brand-mark">G</span><span><strong>Gabriel Pizza</strong><small>Pizzaria artesanal</small></span></a>
+      <nav class="desktop-nav" aria-label="Navegacao principal"><a href="#cardapio">Cardapio</a><a href="#pedido">Pedido</a><a href="#admin">Admin</a></nav>
+      <a class="whatsapp-mini" href="https://wa.me/5588992258066" target="_blank" rel="noreferrer">WhatsApp</a>
+    </header>
+    <main>
+      <section id="cardapio" class="menu-section screen">
+        <div class="section-heading"><span>Cardapio digital</span><h2>Escolha seus favoritos</h2></div><div id="storeStatusBanner" class="store-status-banner"></div>
+        <div class="menu-tools"><label class="search-box"><span>Buscar</span><input id="searchInput" type="search" placeholder="Pizza, combo, bebida..." /></label><div class="category-tabs" id="categoryTabs" aria-label="Categorias"></div></div>
+        <div class="product-grid" id="productGrid"></div>
+      </section>
+
+      <section id="pedido" class="order-layout screen">
+        <div class="checkout-panel">
+          <div class="section-heading compact"><span>Finalizacao</span><h2>Dados do pedido</h2></div>
+          <div class="form-grid">
+            <label>Nome do cliente<input id="customerName" type="text" placeholder="Seu nome" /></label>
+            <label>Telefone<input id="customerPhone" type="tel" placeholder="(85) 99999-9999" /></label>
+            <label>Forma de pagamento<select id="paymentMethod"><option>Pix</option><option>Cartao de credito</option><option>Cartao de debito</option><option>Dinheiro</option></select></label>
+            <label>Troco para<input id="changeFor" type="number" min="0" placeholder="Opcional" /></label>
+            <label>Cupom de desconto<input id="couponInput" type="text" placeholder="Ex: GARCA10" /></label>
+            <label>Local da entrega<select id="addressMode"><option value="condo" selected>Condominio</option><option value="common">Endereco comum</option></select></label>
+          </div>
+          <p id="couponMessage" class="field-message"></p>
+          <div id="commonAddress" class="address-block"><label>Rua<input id="street" type="text" placeholder="Rua" required /></label><label>Numero<input id="number" type="text" placeholder="Numero" required /></label><label>Bairro<input id="district" type="text" placeholder="Bairro" required /></label><label>CEP<input id="zip" type="text" placeholder="00000-000" required /></label><label>Ponto de referencia<input id="reference" type="text" placeholder="Proximo a..." required /></label><label>Distancia calculada<input id="distanceKm" type="text" placeholder="Google Maps" readonly /></label><label class="wide">Complemento<input id="complement" type="text" placeholder="Apto, bloco..." /></label><div class="wide quote-row"><button class="button secondary" id="quoteDeliveryButton" type="button">Calcular entrega pelo Google Maps</button><span id="deliveryQuoteMessage" class="field-message"></span></div></div>
+          <div id="condoAddress" class="address-block hidden"><label>Condominio<select id="condominiumSelect"></select></label><label>Torre<input id="tower" type="text" placeholder="Ex: Torre B" required /></label><label>Apartamento<input id="apartment" type="text" placeholder="Ex: 304" required /></label><label class="wide">Observacao para entrega<textarea id="condoNote" rows="3" placeholder="Ex: deixar na portaria"></textarea></label></div>
+          <label class="notes">Observacoes do pedido<textarea id="orderNotes" rows="3" placeholder="Ex: sem cebola, borda bem assada..."></textarea></label>
+          <button class="button primary full order-action" id="sendOrder">Finalizar pedido pelo WhatsApp</button>
+        </div>
+        <aside class="cart-panel" aria-label="Carrinho"><div class="cart-header"><h2>Carrinho</h2><span id="cartCount">0 itens</span></div><div id="cartItems" class="cart-items"></div><div class="totals"><div><span>Subtotal</span><strong id="subtotal">R$ 0,00</strong></div><div><span>Entrega</span><strong id="deliveryFee">R$ 0,00</strong></div><div><span>Desconto</span><strong id="discount">R$ 0,00</strong></div><div class="grand-total"><span>Total</span><strong id="total">R$ 0,00</strong></div></div></aside>
+      </section>
+
+      <section id="admin" class="admin-section screen">
+        <div id="adminLogin" class="login-panel">
+          <div class="section-heading compact"><span>Painel administrativo</span><h2>Login protegido</h2></div>
+          <label>E-mail<input id="adminEmail" type="email" placeholder="Digite seu e-mail" /></label>
+          <label>Senha<div class="password-field"><input id="adminPassword" type="password" placeholder="Digite sua senha" /><button id="toggleAdminPassword" type="button" aria-label="Mostrar senha">Ver</button></div></label>
+          <div class="admin-actions"><button id="adminLoginButton" class="button primary" type="button">Entrar</button><button id="adminRecoverButton" class="button ghost" type="button">Recuperar senha</button></div>
+          <div id="adminRecoverForm" class="recover-form hidden">
+            <label>E-mail cadastrado<input id="recoverEmail" type="email" placeholder="Digite o e-mail do admin" /></label>
+            <div class="admin-actions"><button id="adminSendCodeButton" class="button primary" type="button">Enviar código</button><button id="adminCancelRecoverButton" class="button ghost" type="button">Cancelar</button></div>
+            <label>Código de segurança<input id="recoverCode" type="text" inputmode="numeric" maxlength="6" placeholder="Código recebido por e-mail" /></label>
+            <label>Nova senha<input id="recoverPassword" type="password" placeholder="Nova senha" /></label>
+            <label>Confirmar senha<input id="recoverConfirm" type="password" placeholder="Repita a nova senha" /></label>
+            <div class="admin-actions"><button id="adminSavePasswordButton" class="button primary" type="button">Salvar nova senha</button></div>
+          </div>
+          <p id="adminLoginMessage" class="admin-message"></p>
+        </div>
+
+        <div id="adminProtected" class="admin-protected hidden">
+          <div class="admin-session-bar"><strong>Gabriel Pizza Admin</strong><button id="adminLogoutButton" class="button ghost" type="button">Sair</button></div>
+          <div class="dashboard"><div class="metric"><span>Pedidos do dia</span><strong id="metricOrdersToday">0</strong></div><div class="metric"><span>Faturamento</span><strong id="metricRevenue">R$ 0,00</strong></div><div class="metric"><span>Mais vendido</span><strong id="metricTopProduct">-</strong></div><div class="metric"><span>Pendentes</span><strong id="metricPending">0</strong></div></div>
+          <div class="orders-panel">
+            <div class="section-heading compact"><span>Pedidos em tempo real</span><h2>Pedidos recentes</h2></div>
+            <p id="printStatusMessage" class="field-message"></p>
+            <div id="adminOrders" class="admin-orders"><div class="empty">Nenhum pedido carregado.</div></div>
+          </div>
+          <div class="admin-grid"><article><h3>Produtos</h3><p>Criar, editar, ocultar, reativar e controlar disponibilidade.</p><button data-admin-panel="products">Gerenciar produtos</button></article><article><h3>Combos</h3><p>Monte combos com produtos cadastrados, calcule desconto e publique no cardapio.</p><button data-admin-panel="combos">Criar combos</button></article><article><h3>Categorias</h3><p>Ativar, desativar e reordenar pizzas, combos, bebidas, sobremesas e promocoes.</p><button data-admin-panel="categories">Organizar categorias</button></article><article><h3>Pedidos</h3><p>Visualizacao em tempo real, alteracao de status, historico e filtros por data.</p><button data-admin-panel="orders">Ver pedidos</button></article><article><h3>Loja</h3><p>Abra ou feche a pizzaria e controle a mensagem exibida ao cliente.</p><button data-admin-panel="store">Abrir ou fechar</button></article><article><h3>Entregas</h3><p>Taxa por bairro, area de cobertura e condominios especiais com torres cadastradas.</p><button data-admin-panel="delivery">Configurar entregas</button></article><article><h3>Reserva das Garcas 1</h3><p>Condominio cadastrado por padrao, taxa especifica, torres ativas e preenchimento futuro.</p><button data-admin-panel="condo">Editar condominio</button></article><article><h3>Promocoes</h3><p>Cupons, campanhas temporarias, produtos em destaque e descontos em combos.</p><button data-admin-panel="promos">Criar promocao</button></article></div>
+          <div id="adminPanelOutput" class="admin-panel-output"><div class="empty">Escolha uma opcao acima para gerenciar.</div></div>
+        </div>
+      </section>
+
+      <section id="inicio" class="hero screen">
+        <div class="hero-copy">
+          <span class="status-pill">Aberto hoje ate 23:30</span>
+          <h1>Pizza quente, pedido simples e entrega organizada.</h1>
+          <p>Cardapio digital para clientes comprarem online e painel administrativo para a pizzaria controlar produtos, pedidos, entregas e promocoes.</p>
+          <div class="hero-actions"><a class="button primary" href="#cardapio">Ver cardapio</a><a class="button secondary" href="#admin">Entrar no painel</a></div>
+        </div>
+        <div class="store-panel" aria-label="Informacoes da pizzaria">
+          <div class="cover"></div>
+          <div class="profile-row"><div class="profile-photo">GP</div><div><strong>Gabriel Pizza</strong><p>Av. das Pizzas, 1200 - Fortaleza, CE</p></div></div>
+          <dl class="store-info"><div><dt>Contato</dt><dd>(85) 99999-9999</dd></div><div><dt>Entrega</dt><dd>35 a 55 min</dd></div><div><dt>Pagamento</dt><dd>Pix, cartao ou dinheiro</dd></div></dl>
+        </div>
+      </section>
+    </main>
+
+    <div id="productDetail" class="product-detail hidden" aria-hidden="true"></div>
+    <div id="pixStep" class="pix-step hidden" aria-hidden="true"></div>
+    <button id="cartFab" class="cart-fab order-action" type="button" aria-label="Abrir carrinho">
+      <img alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c83228'/%3E%3Cpath d='M18 18h5l4 22h19l4-15H27' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='31' cy='48' r='3.5' fill='white'/%3E%3Ccircle cx='45' cy='48' r='3.5' fill='white'/%3E%3C/svg%3E" />
+      <span id="cartFabCount">0</span>
+      <div class="cart-fab-copy"><small>Ver carrinho</small><strong id="cartFabTotal">R$ 0,00</strong></div><span class="cart-fab-action">Pedido</span>
+    </button>
+    <script src="./script.js?v=google-print-categories"></script>
+  </body>
+</html>
+
+
+
+
+
+
+
+
