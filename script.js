@@ -965,7 +965,14 @@ async function updateOrderStatus(orderId, status) {
 
 async function adminFetch(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { ...(options.headers || {}), ...adminHeaders() } });
-  const data = await response.json();
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (error) {
+    throw new Error('O servidor nao respondeu em JSON. Recarregue a pagina e tente novamente.');
+  }
+  if (!data) throw new Error('O servidor respondeu vazio. Recarregue a pagina e tente novamente.');
   if (!response.ok) throw new Error(data.error || 'Operacao nao realizada');
   return data;
 }

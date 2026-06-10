@@ -1071,34 +1071,40 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path == '/api/health':
-            self.send_json(200, {'ok': True, 'name': get_menu()['store']['name'], 'database': str(DB_PATH.name)})
-        elif parsed.path == '/api/menu':
-            self.send_json(200, get_menu())
-        elif parsed.path == '/api/orders':
-            if not admin_authorized(self):
-                self.send_error_json(401, 'Login administrativo necessario')
+        try:
+            if parsed.path == '/api/health':
+                self.send_json(200, {'ok': True, 'name': get_menu()['store']['name'], 'database': 'PostgreSQL' if USE_POSTGRES else str(DB_PATH.name)})
+            elif parsed.path == '/api/menu':
+                self.send_json(200, get_menu())
+            elif parsed.path == '/api/orders':
+                if not admin_authorized(self):
+                    self.send_error_json(401, 'Login administrativo necessario')
+                else:
+                    self.send_json(200, list_orders())
+            elif parsed.path == '/api/admin/summary':
+                if not admin_authorized(self):
+                    self.send_error_json(401, 'Login administrativo necessario')
+                else:
+                    self.send_json(200, admin_summary())
+            elif parsed.path == '/api/admin/products':
+                if not admin_authorized(self):
+                    self.send_error_json(401, 'Login administrativo necessario')
+                else:
+                    self.send_json(200, admin_products())
+            elif parsed.path == '/api/admin/categories':
+                if not admin_authorized(self):
+                    self.send_error_json(401, 'Login administrativo necessario')
+                else:
+                    self.send_json(200, admin_categories())
+            elif parsed.path.startswith('/api/'):
+                self.send_error_json(404, 'Rota da API nao encontrada')
             else:
-                self.send_json(200, list_orders())
-        elif parsed.path == '/api/admin/summary':
-            if not admin_authorized(self):
-                self.send_error_json(401, 'Login administrativo necessario')
+                self.serve_static(parsed.path)
+        except Exception as error:
+            if parsed.path.startswith('/api/'):
+                self.send_error_json(500, str(error))
             else:
-                self.send_json(200, admin_summary())
-        elif parsed.path == '/api/admin/products':
-            if not admin_authorized(self):
-                self.send_error_json(401, 'Login administrativo necessario')
-            else:
-                self.send_json(200, admin_products())
-        elif parsed.path == '/api/admin/categories':
-            if not admin_authorized(self):
-                self.send_error_json(401, 'Login administrativo necessario')
-            else:
-                self.send_json(200, admin_categories())
-        elif parsed.path.startswith('/api/'):
-            self.send_error_json(404, 'Rota da API nao encontrada')
-        else:
-            self.serve_static(parsed.path)
+                raise
 
     def do_POST(self):
         path = urlparse(self.path).path
