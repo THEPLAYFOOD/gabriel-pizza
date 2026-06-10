@@ -13,6 +13,7 @@ import re
 import smtplib
 import sqlite3
 import ssl
+import socket
 import time
 import uuid
 
@@ -249,11 +250,46 @@ def send_security_email(email, code):
         "Esse codigo expira em 10 minutos. Se voce nao solicitou, ignore este e-mail."
     )
     context = ssl.create_default_context()
-    with smtplib.SMTP(host, port, timeout=15) as smtp:
-        smtp.starttls(context=context)
-        smtp.login(user, password)
-        smtp.send_message(message)
-    return True
+    try:
+        with smtplib.SMTP(host, port, timeout=15) as smtp:
+            smtp.starttls(context=context)
+            smtp.login(user, password)
+            smtp.send_message(message)
+        return True
+    except OSError:
+        pass
+    try:
+        addresses = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        return False
+    for family, socktype, proto, _, address in addresses:
+        smtp = None
+        try:
+            sock = socket.socket(family, socktype, proto)
+            sock.settimeout(15)
+            sock.connect(address)
+            smtp = smtplib.SMTP(timeout=15)
+            smtp.sock = sock
+            smtp.file = sock.makefile('rb')
+            smtp._host = host
+            code_response, _ = smtp.getreply()
+            if code_response != 220:
+                smtp.close()
+                continue
+            smtp.ehlo()
+            smtp.starttls(context=context)
+            smtp.ehlo()
+            smtp.login(user, password)
+            smtp.send_message(message)
+            smtp.quit()
+            return True
+        except Exception:
+            try:
+                if smtp:
+                    smtp.close()
+            except Exception:
+                pass
+    return False
 
 def request_admin_password_code(payload):
     email = str(payload.get('email') or '').strip().lower()
@@ -271,8 +307,10 @@ def request_admin_password_code(payload):
     email_sent = send_security_email(credentials['email'], code)
     response = {'ok': True, 'email': credentials['email'], 'emailSent': email_sent}
     if not email_sent:
-        response['devCode'] = code
-        response['message'] = 'SMTP nao configurado. Codigo exibido apenas para teste local.'
+        response['message'] = 'Nao foi possivel enviar o codigo por e-mail. Confira as variaveis SMTP no Render.'
+        if not os.environ.get('RENDER'):
+            response['devCode'] = code
+            response['message'] = 'SMTP nao configurado. Codigo exibido apenas para teste local.'
     return response
 
 def confirm_admin_password_code(payload):
@@ -314,7 +352,9 @@ def request_admin_email_code(payload):
         conn.execute('INSERT INTO admin_email_resets (current_email, new_email, code, expires_at) VALUES (?, ?, ?, ?)', (credentials['email'], new_email, code, expires_at))
     result = {'ok': True, 'emailSent': sent, 'newEmail': new_email}
     if not sent:
-        result['devCode'] = code
+        result['message'] = 'Nao foi possivel enviar o codigo por e-mail. Confira as variaveis SMTP no Render.'
+        if not os.environ.get('RENDER'):
+            result['devCode'] = code
     return result
 
 def confirm_admin_email_code(payload):

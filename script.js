@@ -1168,7 +1168,7 @@ async function requestAdminEmailCode() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ newEmail: formData.get('newEmail') })
   });
-  message.textContent = data.devCode ? `Codigo de teste local: ${data.devCode}` : 'Codigo enviado para o novo e-mail.';
+  message.textContent = data.devCode ? `Codigo de teste local: ${data.devCode}` : (data.emailSent === false ? (data.message || 'Nao foi possivel enviar o codigo por e-mail.') : 'Codigo enviado para o novo e-mail.');
 }
 
 async function submitAdminEmailForm(form) {
@@ -1216,6 +1216,8 @@ async function requestRecoveryCode() {
     if (data.devCode) {
       $('#recoverCode').value = data.devCode;
       message.textContent = `Codigo de teste local: ${data.devCode}. Configure SMTP para envio real por e-mail.`;
+    } else if (data.emailSent === false) {
+      message.textContent = data.message || 'Nao foi possivel enviar o codigo por e-mail.';
     } else {
       message.textContent = 'Codigo enviado para o e-mail cadastrado.';
     }
