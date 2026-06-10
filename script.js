@@ -893,6 +893,7 @@ function comboForm(combo = {}) {
           <input type="checkbox" id="${categoryId}" data-combo-category-toggle ${enabled ? 'checked' : ''} />
           ${categoryName}
         </label>
+        <small class="combo-category-hint">Marque a categoria para liberar estes itens no combo.</small>
         <div class="combo-category-products">
           ${items.map(product => `
             <label class="admin-check">
@@ -1152,7 +1153,7 @@ function toggleComboCategory(input) {
   group.classList.toggle('enabled', input.checked);
   group.querySelectorAll('input[name="comboProduct"]').forEach(productInput => {
     productInput.disabled = !input.checked;
-    if (!input.checked) productInput.checked = false;
+    productInput.checked = input.checked;
   });
 }
 
