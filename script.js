@@ -88,11 +88,11 @@ function renderCondominiumOptions() {
 }
 
 function pizzaProducts() {
-  return products.filter(product => product.category.startsWith('Pizzas'));
+  return products.filter(product => product.category.startsWith('Pizzas') && product.visibleInMenu !== false && !product.outOfStock);
 }
 
 function comboPizzaBuilderCard(combo) {
-  const pizzas = pizzaProducts();
+  const pizzas = comboFlavorProducts(combo);
   if (!combo || !combo.comboAllowHalf || pizzas.length < 1 || state.activeComboId !== combo.id) return '';
   const options = pizzas.map(product => `<option value="${product.id}">${product.name} - ${money(product.price)}</option>`).join('');
   return `
@@ -124,10 +124,10 @@ function updateHalfPizzaPrice() {
 }
 
 function comboFlavorProducts(combo) {
-  const allowed = combo?.comboProductIds?.length
-    ? products.filter(product => combo.comboProductIds.includes(product.id) && product.category.startsWith('Pizzas'))
-    : [];
-  return allowed.length ? allowed : pizzaProducts();
+  if (combo?.comboProductIds?.length) {
+    return products.filter(product => combo.comboProductIds.includes(product.id) && product.category.startsWith('Pizzas') && !product.outOfStock);
+  }
+  return pizzaProducts();
 }
 
 function isComboProduct(product) {
@@ -135,7 +135,7 @@ function isComboProduct(product) {
 }
 
 function detailFlavorOptions(combo) {
-  return comboFlavorProducts(combo).map(product => `<option value="${product.id}">${product.name} - ${money(product.price)}</option>`).join('');
+  return comboFlavorProducts(combo).map(product => `<option value="${product.id}">${product.name} - ${money(product.price)}</option>`).join('') || '<option value="">Nenhum sabor disponivel</option>';
 }
 
 function comboSelectionPrice(combo) {
@@ -206,6 +206,7 @@ function syncDetailMode() {
 function renderProducts() {
   const query = state.query.trim().toLowerCase();
   const visible = products.filter(product => {
+    if (product.visibleInMenu === false || product.outOfStock) return false;
     const matchesCategory = state.category === 'Todos' || product.category === state.category;
     const matchesQuery = !query || [product.name, product.desc, product.ingredients].join(' ').toLowerCase().includes(query);
     return matchesCategory && matchesQuery;
@@ -855,6 +856,7 @@ function productForm(product = {}) {
         <label class="wide">Descricao<textarea name="desc" rows="2" required>${product.desc || ''}</textarea></label>
         <label class="wide">Ingredientes<textarea name="ingredients" rows="2" required>${product.ingredients || ''}</textarea></label>
         <label class="admin-check"><input name="available" type="checkbox" ${product.available === false ? '' : 'checked'} /> Disponivel no cardapio</label>
+        <label class="admin-check"><input name="outOfStock" type="checkbox" ${product.outOfStock ? 'checked' : ''} /> Acabou o produto</label>
       </div>
       <div class="admin-actions"><button class="button primary" type="submit">${product.id ? 'Salvar alteracoes' : 'Cadastrar produto'}</button><button class="button ghost" type="button" data-admin-panel="products">Limpar</button></div>
     </form>
@@ -864,7 +866,7 @@ function productForm(product = {}) {
 function productsTable() {
   return `
     <table><thead><tr><th>Produto</th><th>Categoria</th><th>Preco</th><th>Status</th><th>Acoes</th></tr></thead><tbody>
-      ${adminState.products.map(product => `<tr><td>${product.name}</td><td>${product.category}</td><td>${money(product.price)}</td><td>${product.available ? 'Disponivel' : 'Oculto'}</td><td><button data-edit-product="${product.id}">Editar</button><button data-toggle-product="${product.id}">${product.available ? 'Ocultar' : 'Reativar'}</button><button data-delete-product="${product.id}">Excluir</button></td></tr>`).join('')}
+      ${adminState.products.map(product => `<tr><td>${product.name}</td><td>${product.category}</td><td>${money(product.price)}</td><td>${product.outOfStock ? 'Acabou' : (product.available ? 'Disponivel' : 'Oculto')}</td><td><button data-edit-product="${product.id}">Editar</button><button data-toggle-product="${product.id}">${product.available ? 'Ocultar' : 'Reativar'}</button><button data-stock-product="${product.id}">${product.outOfStock ? 'Voltou' : 'Acabou'}</button><button data-delete-product="${product.id}">Excluir</button></td></tr>`).join('')}
     </tbody></table>
   `;
 }
@@ -875,8 +877,8 @@ function comboForm(combo = {}) {
   const selectedCategoryId = combo.categoryId || comboCategory?.id || '';
   const categoryOptions = adminState.categories.map(category => `<option value="${category.id}" ${category.id === selectedCategoryId ? 'selected' : ''}>${category.name}${category.active ? '' : ' (oculta)'}</option>`).join('');
   const selectedComboProducts = combo.comboProductIds || [];
-  const choices = adminState.products.filter(product => product.available && !isComboProduct(product)).map(product => `
-    <label class="admin-check"><input type="checkbox" name="comboProduct" value="${product.id}" ${selectedComboProducts.includes(product.id) ? 'checked' : ''} /> ${product.name} - ${money(product.price)}</label>
+  const choices = adminState.products.filter(product => !product.outOfStock && !isComboProduct(product)).map(product => `
+    <label class="admin-check"><input type="checkbox" name="comboProduct" value="${product.id}" ${selectedComboProducts.includes(product.id) ? 'checked' : ''} /> ${product.name} - ${money(product.price)}${product.available ? '' : ' (oculto no cardapio)'}</label>
   `).join('');
   return `
     <form id="adminComboForm" class="admin-form" data-edit-id="${combo.id || ''}">
@@ -887,6 +889,7 @@ function comboForm(combo = {}) {
         <label>Valor do combo<input name="price" type="number" min="0.01" step="0.01" value="${combo.price || ''}" placeholder="Ex: 89.90" required /></label>
         <label class="admin-check combo-switch"><input type="checkbox" name="comboAllowHalf" ${combo.comboAllowHalf ? 'checked' : ''} /> Permitir pizza meio a meio para o cliente</label>
         <input name="currentImage" type="hidden" value="${combo.image || ''}" />
+        <input name="outOfStockHidden" type="hidden" value="${combo.outOfStock ? '1' : '0'}" />
         <label class="wide">Imagem do computador<input name="imageFile" type="file" accept="image/*" /></label>
         <div class="wide combo-choice-list">${choices}</div>
       </div>
@@ -911,6 +914,7 @@ async function submitComboForm(form) {
     desc: `Inclui: ${selected.map(product => product.name).join(', ')}.${formData.get('comboAllowHalf') === 'on' ? ' Permite escolher pizza inteira ou meio a meio.' : ''}`,
     ingredients: selected.map(product => product.name).join(', '),
     available: true,
+    outOfStock: formData.get('outOfStockHidden') === '1',
     comboProductIds: selectedIds,
     comboAllowHalf: formData.get('comboAllowHalf') === 'on'
   };
@@ -926,7 +930,7 @@ async function submitComboForm(form) {
 function combosTable() {
   const rows = adminState.products
     .filter(product => isComboProduct(product))
-    .map(product => `<tr><td>${product.name}</td><td>${product.category}</td><td>${product.comboAllowHalf ? 'Permite meio a meio' : 'Combo comum'}</td><td>${money(product.price)}</td><td>${product.available ? 'Disponivel' : 'Oculto'}</td><td><button data-edit-combo="${product.id}">Editar</button><button data-toggle-product="${product.id}">${product.available ? 'Ocultar' : 'Reativar'}</button><button data-delete-product="${product.id}">Excluir</button></td></tr>`)
+    .map(product => `<tr><td>${product.name}</td><td>${product.category}</td><td>${product.comboAllowHalf ? 'Permite meio a meio' : 'Combo comum'}</td><td>${money(product.price)}</td><td>${product.outOfStock ? 'Acabou' : (product.available ? 'Disponivel' : 'Oculto')}</td><td><button data-edit-combo="${product.id}">Editar</button><button data-toggle-product="${product.id}">${product.available ? 'Ocultar' : 'Reativar'}</button><button data-stock-product="${product.id}">${product.outOfStock ? 'Voltou' : 'Acabou'}</button><button data-delete-product="${product.id}">Excluir</button></td></tr>`)
     .join('') || '<tr><td colspan="6">Nenhum combo cadastrado.</td></tr>';
   return `<table><thead><tr><th>Combo</th><th>Categoria</th><th>Tipo</th><th>Preco</th><th>Status</th><th>Acoes</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -1011,6 +1015,7 @@ async function submitProductForm(form) {
     desc: formData.get('desc'),
     ingredients: formData.get('ingredients'),
     available: formData.get('available') === 'on',
+    outOfStock: formData.get('outOfStock') === 'on',
     comboProductIds: JSON.parse(formData.get('comboProductIdsJson') || '[]'),
     comboAllowHalf: formData.get('comboAllowHalfHidden') === '1'
   };
@@ -1045,6 +1050,19 @@ async function toggleProduct(productId) {
   const product = adminState.products.find(item => item.id === Number(productId));
   if (!product) return;
   await adminFetch(`/api/admin/products/${productId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...product, available: !product.available }) });
+  state.cart = state.cart.filter(item => item.id !== Number(productId));
+  await loadMenu();
+  renderCategories();
+  renderProducts();
+  renderCart();
+  await renderAdminPanel(adminState.activePanel === 'combos' ? 'combos' : 'products');
+}
+
+async function toggleProductStock(productId) {
+  await loadAdminCatalog();
+  const product = adminState.products.find(item => item.id === Number(productId));
+  if (!product) return;
+  await adminFetch(`/api/admin/products/${productId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...product, outOfStock: !product.outOfStock }) });
   state.cart = state.cart.filter(item => item.id !== Number(productId));
   await loadMenu();
   renderCategories();
@@ -1307,6 +1325,7 @@ document.addEventListener('click', event => {
   const editComboButton = event.target.closest('[data-edit-combo]');
   const editCategoryButton = event.target.closest('[data-edit-category]');
   const deleteProductButton = event.target.closest('[data-delete-product]');
+  const stockProductButton = event.target.closest('[data-stock-product]');
   const deleteCouponButton = event.target.closest('[data-delete-coupon]');
   const deleteCategoryButton = event.target.closest('[data-delete-category]');
   const toggleProductButton = event.target.closest('[data-toggle-product]');
@@ -1331,6 +1350,7 @@ document.addEventListener('click', event => {
   if (editComboButton) editCombo(editComboButton.dataset.editCombo).catch(error => alert(error.message));
   if (editCategoryButton) editCategory(editCategoryButton.dataset.editCategory).catch(error => alert(error.message));
   if (deleteProductButton) deleteProduct(deleteProductButton.dataset.deleteProduct).catch(error => alert(error.message));
+  if (stockProductButton) toggleProductStock(stockProductButton.dataset.stockProduct).catch(error => alert(error.message));
   if (deleteCouponButton) deleteCoupon(deleteCouponButton.dataset.deleteCoupon).catch(error => alert(error.message));
   if (deleteCategoryButton) deleteCategory(deleteCategoryButton.dataset.deleteCategory).catch(error => alert(error.message));
   if (toggleProductButton) toggleProduct(toggleProductButton.dataset.toggleProduct).catch(error => alert(error.message));
