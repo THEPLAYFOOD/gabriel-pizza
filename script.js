@@ -5,7 +5,7 @@ let deliveryConfig = { commonFee: 8, maxRadiusKm: 8, perKmFee: 1, condominiums: 
 let coupons = [];
 
 const screenIds = ['cardapio', 'produto', 'pedido', 'admin', 'inicio'];
-const state = { category: 'Todos', query: '', cart: [], activeComboId: null, detailProductId: null, deliveryQuote: null };
+const state = { category: '', query: '', cart: [], activeComboId: null, detailProductId: null, deliveryQuote: null };
 const adminState = { token: localStorage.getItem('adminToken') || '', email: localStorage.getItem('adminEmail') || '', products: [], categories: [], knownOrderIds: new Set(), orderPoller: null, firstOrdersLoad: true, activePanel: 'dashboard' };
 const money = value => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const $ = selector => document.querySelector(selector);
@@ -83,6 +83,14 @@ function renderStoreStatus() {
 
 function renderCategories() {
   $('#categoryTabs').innerHTML = categories.map(category => `<button class="${category === state.category ? 'active' : ''}" data-category="${category}">${category}</button>`).join('');
+}
+
+function firstCustomerCategory() {
+  return categories.find(category => category !== 'Todos') || 'Todos';
+}
+
+function syncSelectedCategory() {
+  if (!categories.includes(state.category)) state.category = firstCustomerCategory();
 }
 
 function renderCondominiumOptions() {
@@ -1029,7 +1037,7 @@ function couponsTable() {
 }
 
 function categoriesTable() {
-  const rows = adminState.categories.map(category => `<tr><td>${category.sortOrder}</td><td>${category.name}</td><td>${category.allowHalf ? 'Sim' : 'Nao'}</td><td>${category.active ? 'Ativa' : 'Oculta'}</td><td><button data-edit-category="${category.id}">Editar</button><button data-toggle-category="${category.id}">${category.active ? 'Ocultar' : 'Reativar'}</button><button data-delete-category="${category.id}">Excluir</button></td></tr>`).join('');
+  const rows = adminState.categories.map((category, index) => `<tr><td>${index + 1}</td><td>${category.name}</td><td>${category.allowHalf ? 'Sim' : 'Nao'}</td><td>${category.active ? 'Ativa' : 'Oculta'}</td><td><button data-move-category="${category.id}" data-direction="up" ${index === 0 ? 'disabled' : ''}>Subir</button><button data-move-category="${category.id}" data-direction="down" ${index === adminState.categories.length - 1 ? 'disabled' : ''}>Descer</button><button data-edit-category="${category.id}">Editar</button><button data-toggle-category="${category.id}">${category.active ? 'Ocultar' : 'Reativar'}</button><button data-delete-category="${category.id}">Excluir</button></td></tr>`).join('');
   return `<table><thead><tr><th>Ordem</th><th>Categoria</th><th>Meio a meio</th><th>Status</th><th>Acoes</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
@@ -1155,7 +1163,9 @@ async function submitCategoryForm(form) {
   await adminFetch(editId ? `/api/admin/categories/${editId}` : '/api/admin/categories', { method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   await loadMenu();
   await loadAdminCatalog();
+  syncSelectedCategory();
   renderCategories();
+  renderProducts();
   await renderAdminPanel('categories');
 }
 
@@ -1173,6 +1183,7 @@ async function toggleCategory(categoryId) {
   await adminFetch(`/api/admin/categories/${categoryId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...category, active: !category.active }) });
   await loadMenu();
   await loadAdminCatalog();
+  syncSelectedCategory();
   renderCategories();
   renderProducts();
   await renderAdminPanel('categories');
@@ -1183,6 +1194,29 @@ async function deleteCategory(categoryId) {
   adminState.categories = await adminFetch(`/api/admin/categories/${categoryId}`, { method: 'DELETE' });
   await loadMenu();
   await loadAdminCatalog();
+  syncSelectedCategory();
+  renderCategories();
+  renderProducts();
+  await renderAdminPanel('categories');
+}
+
+async function moveCategory(categoryId, direction) {
+  await loadAdminCatalog();
+  const ordered = [...adminState.categories].sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+  const index = ordered.findIndex(category => category.id === Number(categoryId));
+  const targetIndex = direction === 'up' ? index - 1 : index + 1;
+  if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return;
+  [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
+  for (const [sortIndex, category] of ordered.entries()) {
+    await adminFetch(`/api/admin/categories/${category.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...category, sortOrder: sortIndex + 1 })
+    });
+  }
+  await loadMenu();
+  await loadAdminCatalog();
+  syncSelectedCategory();
   renderCategories();
   renderProducts();
   await renderAdminPanel('categories');
@@ -1375,6 +1409,7 @@ async function saveRecoveredPassword() {
 
 async function init() {
   await loadMenu();
+  syncSelectedCategory();
   renderCategories();
   renderProducts();
   routeToScreen();
@@ -1400,6 +1435,7 @@ document.addEventListener('click', event => {
   const editProductButton = event.target.closest('[data-edit-product]');
   const editComboButton = event.target.closest('[data-edit-combo]');
   const editCategoryButton = event.target.closest('[data-edit-category]');
+  const moveCategoryButton = event.target.closest('[data-move-category]');
   const deleteProductButton = event.target.closest('[data-delete-product]');
   const stockProductButton = event.target.closest('[data-stock-product]');
   const deleteCouponButton = event.target.closest('[data-delete-coupon]');
@@ -1425,6 +1461,7 @@ document.addEventListener('click', event => {
   if (editProductButton) editProduct(editProductButton.dataset.editProduct).catch(error => alert(error.message));
   if (editComboButton) editCombo(editComboButton.dataset.editCombo).catch(error => alert(error.message));
   if (editCategoryButton) editCategory(editCategoryButton.dataset.editCategory).catch(error => alert(error.message));
+  if (moveCategoryButton) moveCategory(moveCategoryButton.dataset.moveCategory, moveCategoryButton.dataset.direction).catch(error => alert(error.message));
   if (deleteProductButton) deleteProduct(deleteProductButton.dataset.deleteProduct).catch(error => alert(error.message));
   if (stockProductButton) toggleProductStock(stockProductButton.dataset.stockProduct).catch(error => alert(error.message));
   if (deleteCouponButton) deleteCoupon(deleteCouponButton.dataset.deleteCoupon).catch(error => alert(error.message));

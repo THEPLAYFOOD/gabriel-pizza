@@ -180,6 +180,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shad
 .admin-check { display: flex; align-items: center; gap: 8px; color: var(--ink); }
 .admin-check input { width: auto; }
 .admin-panel-output td button { margin-right: 8px; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #211d1a; color: var(--ink); font-weight: 800; }
+.admin-panel-output td button:disabled { opacity: .42; cursor: not-allowed; transform: none; }
+.admin-panel-output td button[data-move-category] { background: rgba(241,184,75,.12); color: var(--gold); border-color: rgba(241,184,75,.28); }
 .admin-panel-output td button[data-delete-product] { background: rgba(223,58,48,.16); color: #ffd5cb; border-color: rgba(223,58,48,.35); }
 .admin-toast { position: fixed; top: 88px; right: 18px; z-index: 80; display: grid; gap: 4px; width: min(360px, calc(100vw - 28px)); padding: 16px; border: 1px solid rgba(241,184,75,.4); border-radius: 8px; background: linear-gradient(135deg, #241b14, #12100f); color: var(--ink); box-shadow: 0 20px 55px rgba(0,0,0,.65); transform: translateY(-16px); opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
 .admin-toast.show { opacity: 1; transform: translateY(0); }
