@@ -1,7 +1,7 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlencode, unquote, urlparse
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
@@ -234,6 +234,39 @@ def admin_credentials():
         return {'email': row['email'], 'password': row['password']}
 
 def send_security_email(email, code):
+    subject = 'Codigo de seguranca - Gabriel Pizza'
+    text = (
+        f"Seu codigo de seguranca para redefinir a senha do painel Gabriel Pizza e: {code}\n\n"
+        "Esse codigo expira em 10 minutos. Se voce nao solicitou, ignore este e-mail."
+    )
+    html = f"""
+        <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
+          <h2>Codigo de seguranca - Gabriel Pizza</h2>
+          <p>Use o codigo abaixo para continuar:</p>
+          <p style="font-size:28px;font-weight:700;letter-spacing:4px">{code}</p>
+          <p>Esse codigo expira em 10 minutos. Se voce nao solicitou, ignore este e-mail.</p>
+        </div>
+    """
+    resend_key = os.environ.get('RESEND_API_KEY')
+    if resend_key:
+        sender = os.environ.get('RESEND_FROM') or 'Gabriel Pizza <onboarding@resend.dev>'
+        payload = json.dumps({'from': sender, 'to': [email], 'subject': subject, 'text': text, 'html': html}).encode('utf-8')
+        request = Request(
+            'https://api.resend.com/emails',
+            data=payload,
+            headers={'Authorization': f'Bearer {resend_key}', 'Content-Type': 'application/json'},
+            method='POST'
+        )
+        try:
+            with urlopen(request, timeout=15) as response:
+                ok = 200 <= response.status < 300
+                if not ok:
+                    print(f'Resend API status: {response.status}', flush=True)
+                return ok
+        except Exception as error:
+            print(f'Resend API error: {type(error).__name__}: {error}', flush=True)
+            return False
+
     host = os.environ.get('GABRIEL_SMTP_HOST')
     user = os.environ.get('GABRIEL_SMTP_USER')
     password = os.environ.get('GABRIEL_SMTP_PASSWORD')
@@ -243,13 +276,10 @@ def send_security_email(email, code):
     port = int(os.environ.get('GABRIEL_SMTP_PORT') or 587)
     sender = os.environ.get('GABRIEL_SMTP_FROM') or user
     message = EmailMessage()
-    message['Subject'] = 'Codigo de seguranca - Gabriel Pizza'
+    message['Subject'] = subject
     message['From'] = sender
     message['To'] = email
-    message.set_content(
-        f"Seu codigo de seguranca para redefinir a senha do painel Gabriel Pizza e: {code}\n\n"
-        "Esse codigo expira em 10 minutos. Se voce nao solicitou, ignore este e-mail."
-    )
+    message.set_content(text)
     context = ssl.create_default_context()
     if port == 465:
         try:
@@ -320,7 +350,7 @@ def request_admin_password_code(payload):
     print(f'Password recovery emailSent={email_sent}', flush=True)
     response = {'ok': True, 'email': credentials['email'], 'emailSent': email_sent}
     if not email_sent:
-        response['message'] = 'Nao foi possivel enviar o codigo por e-mail. Confira as variaveis SMTP no Render.'
+        response['message'] = 'Nao foi possivel enviar o codigo por e-mail. Configure RESEND_API_KEY no Render ou confira o SMTP.'
         if not os.environ.get('RENDER'):
             response['devCode'] = code
             response['message'] = 'SMTP nao configurado. Codigo exibido apenas para teste local.'
@@ -365,7 +395,7 @@ def request_admin_email_code(payload):
         conn.execute('INSERT INTO admin_email_resets (current_email, new_email, code, expires_at) VALUES (?, ?, ?, ?)', (credentials['email'], new_email, code, expires_at))
     result = {'ok': True, 'emailSent': sent, 'newEmail': new_email}
     if not sent:
-        result['message'] = 'Nao foi possivel enviar o codigo por e-mail. Confira as variaveis SMTP no Render.'
+        result['message'] = 'Nao foi possivel enviar o codigo por e-mail. Configure RESEND_API_KEY no Render ou confira o SMTP.'
         if not os.environ.get('RENDER'):
             result['devCode'] = code
     return result
