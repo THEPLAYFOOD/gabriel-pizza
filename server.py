@@ -16,11 +16,20 @@ import ssl
 import socket
 import time
 import uuid
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except Exception:
+    psycopg = None
+    dict_row = None
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / 'gabriel_pizza.db'
 SCHEMA_PATH = ROOT / 'schema.sql'
+PG_SCHEMA_PATH = ROOT / 'schema_pg.sql'
 ENV_PATH = ROOT / '.env'
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+USE_POSTGRES = bool(DATABASE_URL)
 STATUSES = ['Pedido recebido', 'Em preparo', 'Saiu para entrega', 'Entregue', 'Pedido cancelado']
 ADMIN_EMAIL = 'j.gabrielmc15@gmail.com'
 ADMIN_PASSWORD = 'Boblindo123'
@@ -64,20 +73,73 @@ def load_env_file():
         if key and key not in os.environ:
             os.environ[key] = value
 
+def translate_pg_sql(sql):
+    sql = sql.strip()
+    if sql.upper().startswith('PRAGMA '):
+        return ''
+    insert_ignore = bool(re.search(r'INSERT\s+OR\s+IGNORE\s+INTO', sql, flags=re.I))
+    sql = re.sub(r'INSERT\s+OR\s+IGNORE\s+INTO', 'INSERT INTO', sql, flags=re.I)
+    if insert_ignore and 'ON CONFLICT' not in sql.upper() and 'RETURNING' not in sql.upper():
+        sql = f'{sql} ON CONFLICT DO NOTHING'
+    return sql.replace('?', '%s')
+
+class PostgresConnection:
+    def __init__(self):
+        if psycopg is None:
+            raise RuntimeError('Instale psycopg[binary] para usar PostgreSQL')
+        self.conn = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type:
+            self.conn.rollback()
+        else:
+            self.conn.commit()
+        self.conn.close()
+
+    def execute(self, sql, params=()):
+        translated = translate_pg_sql(sql)
+        cursor = self.conn.cursor()
+        if not translated:
+            return cursor
+        cursor.execute(translated, params)
+        return cursor
+
+    def executescript(self, script):
+        cursor = self.conn.cursor()
+        for statement in [part.strip() for part in script.split(';') if part.strip()]:
+            cursor.execute(statement)
+        return cursor
+
+    def commit(self):
+        self.conn.commit()
+
 def db():
+    if USE_POSTGRES:
+        return PostgresConnection()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
     return conn
 
+def table_columns(conn, table):
+    if USE_POSTGRES:
+        return [row['column_name'] for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+            (table,)
+        ).fetchall()]
+    return [row['name'] for row in conn.execute(f'PRAGMA table_info({table})')]
+
 def init_db():
     with db() as conn:
-        conn.executescript(SCHEMA_PATH.read_text(encoding='utf-8-sig'))
+        conn.executescript((PG_SCHEMA_PATH if USE_POSTGRES else SCHEMA_PATH).read_text(encoding='utf-8-sig'))
         conn.execute("""
             INSERT OR IGNORE INTO store (id, name, phone, display_phone, address, opening_hours, delivery_estimate)
             VALUES (1, 'Gabriel Pizza', '5588992258066', '(88) 9 9225-8066', 'Av. das Pizzas, 1200 - Fortaleza, CE', 'Aberto hoje ate 23:30', '35 a 55 min')
         """)
-        columns = [row['name'] for row in conn.execute('PRAGMA table_info(store)')]
+        columns = table_columns(conn, 'store')
         if 'description' not in columns:
             conn.execute("ALTER TABLE store ADD COLUMN description TEXT NOT NULL DEFAULT 'Pizzaria artesanal'")
         if 'pix_key' not in columns:
@@ -90,11 +152,11 @@ def init_db():
             conn.execute('ALTER TABLE store ADD COLUMN auto_hours INTEGER NOT NULL DEFAULT 0')
         if 'weekly_hours' not in columns:
             conn.execute("ALTER TABLE store ADD COLUMN weekly_hours TEXT NOT NULL DEFAULT '{}'")
-        category_columns = [row['name'] for row in conn.execute('PRAGMA table_info(categories)')]
+        category_columns = table_columns(conn, 'categories')
         if 'allow_half' not in category_columns:
             conn.execute('ALTER TABLE categories ADD COLUMN allow_half INTEGER NOT NULL DEFAULT 0')
             conn.execute("UPDATE categories SET allow_half = 1 WHERE name LIKE 'Pizzas%'")
-        product_columns = [row['name'] for row in conn.execute('PRAGMA table_info(products)')]
+        product_columns = table_columns(conn, 'products')
         if 'combo_product_ids' not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN combo_product_ids TEXT NOT NULL DEFAULT '[]'")
         if 'combo_product_discounts' not in product_columns:
@@ -103,7 +165,7 @@ def init_db():
             conn.execute('ALTER TABLE products ADD COLUMN combo_allow_half INTEGER NOT NULL DEFAULT 0')
         if 'out_of_stock' not in product_columns:
             conn.execute('ALTER TABLE products ADD COLUMN out_of_stock INTEGER NOT NULL DEFAULT 0')
-        delivery_columns = [row['name'] for row in conn.execute('PRAGMA table_info(delivery_settings)')]
+        delivery_columns = table_columns(conn, 'delivery_settings')
         for column, definition in {
             'store_address': "TEXT NOT NULL DEFAULT 'Av. das Pizzas, 1200 - Fortaleza, CE'",
             'store_lat': 'REAL NOT NULL DEFAULT -3.7319',
@@ -114,7 +176,7 @@ def init_db():
         }.items():
             if column not in delivery_columns:
                 conn.execute(f'ALTER TABLE delivery_settings ADD COLUMN {column} {definition}')
-        coupon_columns = [row['name'] for row in conn.execute('PRAGMA table_info(coupons)')]
+        coupon_columns = table_columns(conn, 'coupons')
         if 'max_uses' not in coupon_columns:
             conn.execute('ALTER TABLE coupons ADD COLUMN max_uses INTEGER')
         if 'used_count' not in coupon_columns:
@@ -775,11 +837,16 @@ def create_product(payload):
         category_id, name, price, desc, ingredients, image, available, out_of_stock, combo_product_ids, combo_product_discounts, combo_allow_half = product_payload(payload)
         if not conn.execute('SELECT id FROM categories WHERE id = ?', (category_id,)).fetchone():
             raise ValueError('Categoria invalida')
-        cursor = conn.execute('''
+        insert_sql = '''
             INSERT INTO products (category_id, name, price, description, ingredients, image_url, available, out_of_stock, combo_product_ids, combo_product_discounts, combo_allow_half)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (category_id, name, price, desc, ingredients, image, available, out_of_stock, json.dumps(combo_product_ids), json.dumps(combo_product_discounts), combo_allow_half))
-        product_id = cursor.lastrowid
+        '''
+        if USE_POSTGRES:
+            insert_sql += ' RETURNING id'
+            product_id = conn.execute(insert_sql, (category_id, name, price, desc, ingredients, image, available, out_of_stock, json.dumps(combo_product_ids), json.dumps(combo_product_discounts), combo_allow_half)).fetchone()['id']
+        else:
+            cursor = conn.execute(insert_sql, (category_id, name, price, desc, ingredients, image, available, out_of_stock, json.dumps(combo_product_ids), json.dumps(combo_product_discounts), combo_allow_half))
+            product_id = cursor.lastrowid
     return next(item for item in admin_products() if item['id'] == product_id)
 
 def update_product(product_id, payload):
@@ -824,7 +891,7 @@ def create_category(payload):
     name = require_text(payload, 'name')
     allow_half = 1 if payload.get('allowHalf') else 0
     with db() as conn:
-        sort = conn.execute('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM categories').fetchone()[0]
+        sort = conn.execute('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort FROM categories').fetchone()['next_sort']
         conn.execute('INSERT OR IGNORE INTO categories (name, sort_order, active, allow_half) VALUES (?, ?, 1, ?)', (name, sort, allow_half))
     return admin_categories()
 
@@ -938,7 +1005,18 @@ def create_coupon(payload):
     if max_uses is not None and max_uses <= 0:
         raise ValueError('Limite de uso deve ser maior que zero')
     with db() as conn:
-        conn.execute('INSERT OR REPLACE INTO coupons (code, discount_type, discount_value, max_uses, used_count, active) VALUES (?, ?, ?, ?, COALESCE((SELECT used_count FROM coupons WHERE code = ?), 0), 1)', (code, 'percent', value, max_uses, code))
+        if USE_POSTGRES:
+            conn.execute('''
+                INSERT INTO coupons (code, discount_type, discount_value, max_uses, used_count, active)
+                VALUES (?, ?, ?, ?, COALESCE((SELECT used_count FROM coupons WHERE code = ?), 0), 1)
+                ON CONFLICT (code) DO UPDATE SET
+                  discount_type = EXCLUDED.discount_type,
+                  discount_value = EXCLUDED.discount_value,
+                  max_uses = EXCLUDED.max_uses,
+                  active = 1
+            ''', (code, 'percent', value, max_uses, code))
+        else:
+            conn.execute('INSERT OR REPLACE INTO coupons (code, discount_type, discount_value, max_uses, used_count, active) VALUES (?, ?, ?, ?, COALESCE((SELECT used_count FROM coupons WHERE code = ?), 0), 1)', (code, 'percent', value, max_uses, code))
         return get_menu()['coupons']
 
 def delete_coupon(coupon_id):
@@ -1212,11 +1290,14 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     load_env_file()
+    DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+    USE_POSTGRES = bool(DATABASE_URL)
     init_db()
     port = int(os.environ.get('PORT') or 4173)
     host = os.environ.get('HOST') or '0.0.0.0'
     server = ThreadingHTTPServer((host, port), Handler)
-    print(f'Gabriel Pizza com SQLite em http://{host}:{port}')
+    database_label = 'PostgreSQL' if USE_POSTGRES else 'SQLite'
+    print(f'Gabriel Pizza com {database_label} em http://{host}:{port}')
     server.serve_forever()
 
 

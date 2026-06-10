@@ -14,6 +14,14 @@ No Render:
 
 ## 2. Variaveis de ambiente
 
+Para nao perder produtos, categorias, combos, pedidos e configuracoes apos redeploy, configure um banco PostgreSQL externo no Render:
+
+```text
+DATABASE_URL=postgresql://usuario:senha@host:5432/banco
+```
+
+Voce pode pegar essa URL em servicos como Supabase ou Neon. Sem `DATABASE_URL`, o sistema usa SQLite local e os dados podem resetar quando o Render recriar o servidor.
+
 Para a recuperacao de senha simples, sem depender de e-mail, configure:
 
 ```text
@@ -63,4 +71,4 @@ Se usar Google Maps, configure a chave pelo painel admin em Entregas.
 
 ## 3. Observacao importante
 
-O SQLite local funciona para testar, mas no plano gratis os arquivos podem nao ser permanentes apos redeploy. Para uso real em producao, o ideal e migrar o banco para PostgreSQL.
+O SQLite local continua funcionando para testar no computador. Em producao, use `DATABASE_URL` com PostgreSQL para persistencia real.
