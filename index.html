@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=whatsapp-mobile-fix" />
+    <link rel="stylesheet" href="./styles.css?v=order-success-screen" />
   </head>
   <body>
     <header class="topbar">
@@ -44,6 +44,10 @@
           <button class="button primary full order-action" id="sendOrder">Finalizar pedido pelo WhatsApp</button>
         </div>
         <aside class="cart-panel" aria-label="Carrinho"><div class="cart-header"><h2>Carrinho</h2><span id="cartCount">0 itens</span></div><div id="cartItems" class="cart-items"></div><div class="totals"><div><span>Subtotal</span><strong id="subtotal">R$ 0,00</strong></div><div><span>Entrega</span><strong id="deliveryFee">R$ 0,00</strong></div><div><span>Desconto</span><strong id="discount">R$ 0,00</strong></div><div class="grand-total"><span>Total</span><strong id="total">R$ 0,00</strong></div></div></aside>
+      </section>
+
+      <section id="sucesso" class="success-section screen">
+        <div id="orderSuccessPanel" class="success-panel"></div>
       </section>
 
       <section id="admin" class="admin-section screen">
@@ -98,7 +102,7 @@
       <span id="cartFabCount">0</span>
       <div class="cart-fab-copy"><small>Ver carrinho</small><strong id="cartFabTotal">R$ 0,00</strong></div><span class="cart-fab-action">Pedido</span>
     </button>
-    <script src="./script.js?v=whatsapp-mobile-fix"></script>
+    <script src="./script.js?v=order-success-screen"></script>
   </body>
 </html>
 

@@ -4,9 +4,10 @@ let store = { name: 'Gabriel Pizza', description: 'Pizzaria artesanal', phone: '
 let deliveryConfig = { commonFee: 8, maxRadiusKm: 8, perKmFee: 1, condominiums: [{ id: 'reserva-garcas-1', name: 'Condominio Reserva das Garcas 1', fee: 4 }] };
 let coupons = [];
 
-const screenIds = ['cardapio', 'produto', 'pedido', 'admin', 'inicio'];
+const screenIds = ['cardapio', 'produto', 'pedido', 'sucesso', 'admin', 'inicio'];
 const state = { category: '', query: '', cart: [], activeComboId: null, detailProductId: null, deliveryQuote: null };
 const adminState = { token: localStorage.getItem('adminToken') || '', email: localStorage.getItem('adminEmail') || '', products: [], categories: [], knownOrderIds: new Set(), orderPoller: null, firstOrdersLoad: true, activePanel: 'dashboard' };
+const orderSuccessKey = 'gabrielLastOrder';
 const money = value => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const $ = selector => document.querySelector(selector);
 
@@ -39,6 +40,7 @@ function routeToScreen() {
   document.querySelectorAll('.desktop-nav a').forEach(link => link.classList.toggle('active', link.getAttribute('href') === `#${activeId}`));
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (activeId === 'produto') renderProductDetail();
+  if (activeId === 'sucesso') renderOrderSuccess();
   if (activeId === 'admin') refreshAdminView();
 }
 
@@ -550,10 +552,75 @@ function validateCheckout() {
   return true;
 }
 
+function orderSuccessSummary(savedOrder) {
+  const totals = savedOrder?.totals || getFees();
+  return {
+    id: savedOrder?.id || 'Pedido registrado',
+    customerName: $('#customerName')?.value || '',
+    customerPhone: $('#customerPhone')?.value || '',
+    paymentMethod: $('#paymentMethod')?.value || '',
+    total: totals.total,
+    delivery: totals.deliveryFee ?? totals.delivery,
+    items: state.cart.map(item => ({ name: item.name, qty: item.qty, total: item.price * item.qty }))
+  };
+}
+
+function saveOrderSuccess(savedOrder) {
+  sessionStorage.setItem(orderSuccessKey, JSON.stringify(orderSuccessSummary(savedOrder)));
+}
+
+function renderOrderSuccess() {
+  const panel = $('#orderSuccessPanel');
+  if (!panel) return;
+  const saved = sessionStorage.getItem(orderSuccessKey);
+  let order = null;
+  try {
+    order = saved ? JSON.parse(saved) : null;
+  } catch (error) {
+    sessionStorage.removeItem(orderSuccessKey);
+  }
+  if (!order) {
+    panel.innerHTML = `
+      <span class="detail-category">Pedido</span>
+      <h2>Nenhum pedido recente</h2>
+      <p>Quando voce finalizar um pedido, o resumo vai aparecer aqui.</p>
+      <a class="button primary" href="#cardapio">Voltar ao cardapio</a>
+    `;
+    return;
+  }
+  panel.innerHTML = `
+    <span class="success-icon">OK</span>
+    <span class="detail-category">Pedido realizado</span>
+    <h2>Pedido enviado para o WhatsApp</h2>
+    <p>Agora envie a mensagem no WhatsApp para confirmar o pedido com a ${store.name || 'pizzaria'}.</p>
+    <div class="success-receipt">
+      <div><span>Numero do pedido</span><strong>${order.id}</strong></div>
+      <div><span>Cliente</span><strong>${order.customerName || '-'}</strong></div>
+      <div><span>Pagamento</span><strong>${order.paymentMethod || '-'}</strong></div>
+      <div><span>Total</span><strong>${money(order.total || 0)}</strong></div>
+    </div>
+    <div class="success-items">
+      <strong>Itens do pedido</strong>
+      ${(order.items || []).map(item => `<div><span>${item.qty}x ${item.name}</span><b>${money(item.total || 0)}</b></div>`).join('')}
+    </div>
+    <div class="success-actions">
+      <a class="button primary" href="#cardapio">Fazer outro pedido</a>
+      <a class="button secondary" href="#pedido">Ver carrinho</a>
+    </div>
+  `;
+}
+
 function openWhatsappWithOrder(savedOrder) {
   const text = buildWhatsappText(savedOrder);
   const phone = String(store.phone || '5588992258066').replace(/\D/g, '');
-  window.location.href = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  saveOrderSuccess(savedOrder);
+  state.cart = [];
+  renderCart();
+  window.location.hash = '#sucesso';
+  setTimeout(() => {
+    window.location.href = url;
+  }, 350);
 }
 
 function showPixStep() {
