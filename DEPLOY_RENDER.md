@@ -31,6 +31,16 @@ GABRIEL_LOG_RECOVERY_CODES=true
 
 Com isso, quando o envio por e-mail falhar, o codigo de recuperacao aparece nos logs do Render. Depois de recuperar o acesso, volte para `false`.
 
+Outra alternativa sem dominio proprio e usar a API da Brevo:
+
+```text
+BREVO_API_KEY=sua-chave-da-brevo
+BREVO_FROM_EMAIL=seu-email-verificado@gmail.com
+BREVO_FROM_NAME=Gabriel Pizza
+```
+
+Na Brevo, o remetente precisa estar cadastrado e verificado antes do envio funcionar.
+
 O SMTP do Gmail pode ficar como fallback, mas em alguns deploys gratuitos o acesso SMTP pode falhar:
 
 ```text

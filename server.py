@@ -265,7 +265,32 @@ def send_security_email(email, code):
                 return ok
         except Exception as error:
             print(f'Resend API error: {type(error).__name__}: {error}', flush=True)
-            return False
+
+    brevo_key = os.environ.get('BREVO_API_KEY')
+    if brevo_key:
+        from_email = os.environ.get('BREVO_FROM_EMAIL') or os.environ.get('GABRIEL_SMTP_FROM') or email
+        from_name = os.environ.get('BREVO_FROM_NAME') or 'Gabriel Pizza'
+        payload = json.dumps({
+            'sender': {'name': from_name, 'email': from_email},
+            'to': [{'email': email}],
+            'subject': subject,
+            'htmlContent': html,
+            'textContent': text
+        }).encode('utf-8')
+        request = Request(
+            'https://api.brevo.com/v3/smtp/email',
+            data=payload,
+            headers={'api-key': brevo_key, 'accept': 'application/json', 'content-type': 'application/json'},
+            method='POST'
+        )
+        try:
+            with urlopen(request, timeout=15) as response:
+                ok = 200 <= response.status < 300
+                if not ok:
+                    print(f'Brevo API status: {response.status}', flush=True)
+                return ok
+        except Exception as error:
+            print(f'Brevo API error: {type(error).__name__}: {error}', flush=True)
 
     host = os.environ.get('GABRIEL_SMTP_HOST')
     user = os.environ.get('GABRIEL_SMTP_USER')
