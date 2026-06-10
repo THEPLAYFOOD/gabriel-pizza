@@ -203,6 +203,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shad
 .combo-included-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #0f0e0d; }
 .combo-included-item small { color: var(--muted); font-weight: 800; }
 .combo-included-item b { color: var(--gold); }
+.product-detail-screen { max-height: min(760px, calc(100vh - 48px)); overflow: hidden; }
+.product-detail-screen .detail-content { overflow-y: auto; padding-bottom: 18px; }
 .schedule-box { display: grid; gap: 10px; margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #141210; }
 .schedule-row { display: grid; grid-template-columns: 1fr 130px 130px; gap: 10px; align-items: center; }
 .map-preview { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 150px; margin-top: 16px; padding: 18px; border: 1px solid rgba(241,184,75,.3); border-radius: 8px; background: linear-gradient(135deg, rgba(241,184,75,.16), rgba(54,166,106,.12)); }

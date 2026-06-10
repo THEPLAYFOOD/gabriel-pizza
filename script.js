@@ -138,6 +138,10 @@ function detailFlavorOptions(combo) {
   return comboFlavorProducts(combo).map(product => `<option value="${product.id}">${product.name} - ${money(product.price)}</option>`).join('') || '<option value="">Nenhum sabor disponivel</option>';
 }
 
+function comboAllowsHalf(combo) {
+  return comboFlavorProducts(combo).some(product => product.categoryAllowHalf);
+}
+
 function comboIncludedGroups(combo) {
   if (!combo?.comboProductIds?.length) return '';
   const selected = products.filter(product => combo.comboProductIds.includes(product.id) && !product.category.startsWith('Pizzas') && !product.outOfStock);
@@ -161,11 +165,10 @@ function comboIncludedGroups(combo) {
 }
 
 function comboSelectionPrice(combo) {
-  const mode = $('#detailPizzaMode')?.value || 'whole';
   const flavorA = products.find(item => item.id === Number($('#detailFlavorA')?.value));
   const flavorB = products.find(item => item.id === Number($('#detailFlavorB')?.value));
   if (!flavorA) return Number(combo?.price || 0);
-  const secondFlavor = mode === 'half' ? (flavorB || flavorA) : flavorA;
+  const secondFlavor = comboAllowsHalf(combo) ? (flavorB || flavorA) : flavorA;
   return Number((((Number(flavorA.price) || 0) + (Number(secondFlavor.price) || 0)) / 2).toFixed(2));
 }
 
@@ -190,6 +193,7 @@ function renderProductDetail() {
   const detail = $('#productDetail');
   if (!detail || !product || !store.isOpen) { closeProductDetail(); return; }
   const comboBuilder = isComboProduct(product) && comboFlavorProducts(product).length > 0;
+  const allowHalf = comboAllowsHalf(product);
   detail.innerHTML = `
     <section class="product-detail-screen" role="dialog" aria-modal="true" aria-label="Detalhes do produto">
       <button class="detail-close" type="button" data-close-detail aria-label="Fechar">x</button>
@@ -203,11 +207,10 @@ function renderProductDetail() {
         ${comboBuilder ? `
           <div class="combo-pizza-builder">
             <strong>Escolha a pizza do combo</strong>
-            <label>Quantidade de sabores<select id="detailPizzaMode"><option value="whole">1 sabor</option><option value="half">2 sabores meio a meio</option></select></label>
-            <label id="detailFlavorALabel">Sabor<select id="detailFlavorA">${detailFlavorOptions(product)}</select></label>
+            <label id="detailFlavorALabel">${allowHalf ? 'Primeiro sabor' : 'Sabor'}<select id="detailFlavorA">${detailFlavorOptions(product)}</select></label>
+            ${allowHalf ? `<label id="detailFlavorBLabel">Segundo sabor<select id="detailFlavorB">${detailFlavorOptions(product)}</select></label>` : ''}
           </div>
-          <label id="detailFlavorBLabel" class="hidden">Segundo sabor<select id="detailFlavorB">${detailFlavorOptions(product)}</select></label>
-          <small class="price-hint">Voce pode escolher no maximo dois sabores de pizza para este combo.</small>
+          <small class="price-hint">${allowHalf ? 'Escolha dois sabores. Para pizza inteira, selecione o mesmo sabor duas vezes.' : 'Esta categoria aceita um sabor neste combo.'}</small>
         ` : ''}
         <label>Quantidade<input id="detailQty" type="number" min="1" max="20" value="1" /></label>
         <button class="button primary full" type="button" data-detail-add="${product.id}">Adicionar ao carrinho</button>
@@ -220,10 +223,6 @@ function renderProductDetail() {
 }
 
 function syncDetailMode() {
-  const half = $('#detailPizzaMode')?.value === 'half';
-  $('#detailFlavorBLabel')?.classList.toggle('hidden', !half);
-  const label = $('#detailFlavorALabel');
-  if (label?.firstChild) label.firstChild.textContent = half ? 'Primeiro sabor' : 'Sabor';
   const product = products.find(item => item.id === state.detailProductId);
   const price = $('#detailComboPrice');
   if (product && price) price.textContent = money(comboSelectionPrice(product));
@@ -348,10 +347,10 @@ function addDetailToCart(productId) {
   const qty = Math.max(1, Number($('#detailQty')?.value || 1));
   if (!product) return;
   if (isComboProduct(product) && comboFlavorProducts(product).length > 0) {
-    const mode = $('#detailPizzaMode')?.value || 'whole';
+    const mode = comboAllowsHalf(product) ? 'half' : 'whole';
     const flavorA = products.find(item => item.id === Number($('#detailFlavorA')?.value));
     const flavorB = products.find(item => item.id === Number($('#detailFlavorB')?.value));
-    if (!flavorA || (mode === 'half' && !flavorB)) return;
+    if (!flavorA || (mode === 'half' && !flavorB)) { alert('Escolha os sabores da pizza do combo.'); return; }
     const id = mode === 'half' ? `combo-${product.id}-half-${flavorA.id}-${flavorB.id}` : `combo-${product.id}-whole-${flavorA.id}`;
     const existing = state.cart.find(item => item.id === id);
     if (existing) existing.qty += qty;
@@ -1014,12 +1013,12 @@ function couponsTable() {
 }
 
 function categoriesTable() {
-  const rows = adminState.categories.map(category => `<tr><td>${category.sortOrder}</td><td>${category.name}</td><td>${category.active ? 'Ativa' : 'Oculta'}</td><td><button data-edit-category="${category.id}">Editar</button><button data-toggle-category="${category.id}">${category.active ? 'Ocultar' : 'Reativar'}</button><button data-delete-category="${category.id}">Excluir</button></td></tr>`).join('');
-  return `<table><thead><tr><th>Ordem</th><th>Categoria</th><th>Status</th><th>Acoes</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const rows = adminState.categories.map(category => `<tr><td>${category.sortOrder}</td><td>${category.name}</td><td>${category.allowHalf ? 'Sim' : 'Nao'}</td><td>${category.active ? 'Ativa' : 'Oculta'}</td><td><button data-edit-category="${category.id}">Editar</button><button data-toggle-category="${category.id}">${category.active ? 'Ocultar' : 'Reativar'}</button><button data-delete-category="${category.id}">Excluir</button></td></tr>`).join('');
+  return `<table><thead><tr><th>Ordem</th><th>Categoria</th><th>Meio a meio</th><th>Status</th><th>Acoes</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function categoryForm(category = null) {
-  return `<form id="adminCategoryForm" class="admin-form" ${category ? `data-edit-id="${category.id}"` : ''}><h3>${category ? 'Editar categoria' : 'Criar categoria'}</h3><div class="form-grid"><label>Nome da categoria<input name="name" value="${category?.name || ''}" required /></label><label>Ordem<input name="sortOrder" type="number" min="1" value="${category?.sortOrder || ''}" placeholder="Automatico" /></label><label class="admin-check">Ativa<input name="active" type="checkbox" ${category?.active !== false ? 'checked' : ''} /></label></div><div class="admin-actions"><button class="button primary" type="submit">${category ? 'Salvar categoria' : 'Criar categoria'}</button></div></form>`;
+  return `<form id="adminCategoryForm" class="admin-form" ${category ? `data-edit-id="${category.id}"` : ''}><h3>${category ? 'Editar categoria' : 'Criar categoria'}</h3><div class="form-grid"><label>Nome da categoria<input name="name" value="${category?.name || ''}" required /></label><label>Ordem<input name="sortOrder" type="number" min="1" value="${category?.sortOrder || ''}" placeholder="Automatico" /></label><label class="admin-check">Ativa<input name="active" type="checkbox" ${category?.active !== false ? 'checked' : ''} /></label><label class="admin-check">Meio a meio<input name="allowHalf" type="checkbox" ${category?.allowHalf ? 'checked' : ''} /></label></div><div class="admin-actions"><button class="button primary" type="submit">${category ? 'Salvar categoria' : 'Criar categoria'}</button></div></form>`;
 }
 
 async function renderAdminPanel(panel) {
@@ -1135,7 +1134,7 @@ async function deleteProduct(productId) {
 
 async function submitCategoryForm(form) {
   const formData = new FormData(form);
-  const payload = { name: formData.get('name'), sortOrder: Number(formData.get('sortOrder') || 0), active: formData.get('active') === 'on' };
+  const payload = { name: formData.get('name'), sortOrder: Number(formData.get('sortOrder') || 0), active: formData.get('active') === 'on', allowHalf: formData.get('allowHalf') === 'on' };
   const editId = form.dataset.editId;
   await adminFetch(editId ? `/api/admin/categories/${editId}` : '/api/admin/categories', { method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   await loadMenu();
@@ -1434,7 +1433,7 @@ document.addEventListener('submit', event => {
 
 document.addEventListener('change', event => {
   if (event.target.closest('#halfFlavorA') || event.target.closest('#halfFlavorB') || event.target.closest('#pizzaBuildMode')) updateHalfPizzaPrice();
-  if (event.target.closest('#detailPizzaMode') || event.target.closest('#detailFlavorA') || event.target.closest('#detailFlavorB')) syncDetailMode();
+  if (event.target.closest('#detailFlavorA') || event.target.closest('#detailFlavorB')) syncDetailMode();
   const comboCategoryToggle = event.target.closest('[data-combo-category-toggle]');
   if (comboCategoryToggle) toggleComboCategory(comboCategoryToggle);
   const statusSelect = event.target.closest('[data-order-status]');

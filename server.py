@@ -90,6 +90,10 @@ def init_db():
             conn.execute('ALTER TABLE store ADD COLUMN auto_hours INTEGER NOT NULL DEFAULT 0')
         if 'weekly_hours' not in columns:
             conn.execute("ALTER TABLE store ADD COLUMN weekly_hours TEXT NOT NULL DEFAULT '{}'")
+        category_columns = [row['name'] for row in conn.execute('PRAGMA table_info(categories)')]
+        if 'allow_half' not in category_columns:
+            conn.execute('ALTER TABLE categories ADD COLUMN allow_half INTEGER NOT NULL DEFAULT 0')
+            conn.execute("UPDATE categories SET allow_half = 1 WHERE name LIKE 'Pizzas%'")
         product_columns = [row['name'] for row in conn.execute('PRAGMA table_info(products)')]
         if 'combo_product_ids' not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN combo_product_ids TEXT NOT NULL DEFAULT '[]'")
@@ -198,10 +202,10 @@ def get_menu():
                 'desc': row['description'], 'ingredients': row['ingredients'], 'available': bool(row['available']),
                 'outOfStock': bool(row['out_of_stock']), 'visibleInMenu': bool(row['available']),
                 'image': row['image_url'], 'comboProductIds': json.loads(row['combo_product_ids'] or '[]'),
-                'comboAllowHalf': bool(row['combo_allow_half'])
+                'comboAllowHalf': bool(row['combo_allow_half']), 'categoryAllowHalf': bool(row['category_allow_half'])
             }
             for row in conn.execute('''
-                SELECT p.*, c.name AS category
+                SELECT p.*, c.name AS category, c.allow_half AS category_allow_half
                 FROM products p JOIN categories c ON c.id = p.category_id
                 WHERE c.active = 1 AND p.out_of_stock = 0
                 ORDER BY c.sort_order, p.id
@@ -592,7 +596,7 @@ def create_order(payload):
                     raise ValueError('Sabor nao pertence a este combo')
                 placeholders = ','.join('?' for _ in flavor_ids)
                 flavors = conn.execute(f'''
-                    SELECT p.id, p.name, p.price, c.name AS category
+                    SELECT p.id, p.name, p.price, c.name AS category, c.allow_half AS category_allow_half
                     FROM products p JOIN categories c ON c.id = p.category_id
                     WHERE p.id IN ({placeholders}) AND p.out_of_stock = 0 AND c.name LIKE 'Pizzas%'
                 ''', flavor_ids).fetchall()
@@ -600,6 +604,8 @@ def create_order(payload):
                     raise ValueError('Sabores do combo invalidos')
                 by_id = {flavor['id']: flavor for flavor in flavors}
                 selected_flavors = [by_id[flavor_id] for flavor_id in flavor_ids]
+                if mode == 'half' and not any(flavor['category_allow_half'] for flavor in selected_flavors):
+                    raise ValueError('Esta categoria nao permite meio a meio')
                 price = round(sum(float(flavor['price']) for flavor in selected_flavors) / len(selected_flavors), 2)
                 if mode == 'half':
                     name = f"{combo['name']} - meio a meio: {by_id[flavor_ids[0]]['name']} / {by_id[flavor_ids[1]]['name']}"
@@ -697,10 +703,10 @@ def admin_products():
                 'price': row['price'], 'desc': row['description'], 'ingredients': row['ingredients'],
                 'image': row['image_url'], 'available': bool(row['available']), 'outOfStock': bool(row['out_of_stock']),
                 'comboProductIds': json.loads(row['combo_product_ids'] or '[]'),
-                'comboAllowHalf': bool(row['combo_allow_half'])
+                'comboAllowHalf': bool(row['combo_allow_half']), 'categoryAllowHalf': bool(row['category_allow_half'])
             }
             for row in conn.execute('''
-                SELECT p.*, c.name AS category
+                SELECT p.*, c.name AS category, c.allow_half AS category_allow_half
                 FROM products p JOIN categories c ON c.id = p.category_id
                 ORDER BY c.sort_order, p.id
             ''')
@@ -708,7 +714,10 @@ def admin_products():
 
 def admin_categories():
     with db() as conn:
-        return [dict(row) for row in conn.execute('SELECT id, name, sort_order AS sortOrder, active FROM categories ORDER BY sort_order, name')]
+        return [
+            {'id': row['id'], 'name': row['name'], 'sortOrder': row['sortOrder'], 'active': bool(row['active']), 'allowHalf': bool(row['allowHalf'])}
+            for row in conn.execute('SELECT id, name, sort_order AS sortOrder, active, allow_half AS allowHalf FROM categories ORDER BY sort_order, name')
+        ]
 
 def require_text(payload, key):
     value = str(payload.get(key) or '').strip()
@@ -786,14 +795,16 @@ def delete_product(product_id):
 
 def create_category(payload):
     name = require_text(payload, 'name')
+    allow_half = 1 if payload.get('allowHalf') else 0
     with db() as conn:
         sort = conn.execute('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM categories').fetchone()[0]
-        conn.execute('INSERT OR IGNORE INTO categories (name, sort_order, active) VALUES (?, ?, 1)', (name, sort))
+        conn.execute('INSERT OR IGNORE INTO categories (name, sort_order, active, allow_half) VALUES (?, ?, 1, ?)', (name, sort, allow_half))
     return admin_categories()
 
 def update_category(category_id, payload):
     name = require_text(payload, 'name')
     active = 1 if payload.get('active', True) else 0
+    allow_half = 1 if payload.get('allowHalf') else 0
     sort_order = int(payload.get('sortOrder') or 0)
     with db() as conn:
         current = conn.execute('SELECT sort_order FROM categories WHERE id = ?', (category_id,)).fetchone()
@@ -801,7 +812,7 @@ def update_category(category_id, payload):
             return None
         if sort_order <= 0:
             sort_order = current['sort_order']
-        conn.execute('UPDATE categories SET name = ?, active = ?, sort_order = ? WHERE id = ?', (name, active, sort_order, category_id))
+        conn.execute('UPDATE categories SET name = ?, active = ?, allow_half = ?, sort_order = ? WHERE id = ?', (name, active, allow_half, sort_order, category_id))
     return admin_categories()
 
 def delete_category(category_id):
