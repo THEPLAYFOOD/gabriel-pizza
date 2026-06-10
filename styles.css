@@ -196,6 +196,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shad
 .combo-category-group:not(.enabled) .combo-category-products { display: none; }
 .combo-category-products .admin-check { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #171310; }
 @media (max-width: 680px) { .combo-category-products { grid-template-columns: 1fr; } }
+.combo-included, .combo-pizza-builder { display: grid; gap: 10px; margin: 12px 0; padding: 12px; border: 1px solid rgba(241,184,75,.28); border-radius: 8px; background: #14110f; }
+.combo-included > strong, .combo-pizza-builder > strong { color: var(--gold); }
+.combo-included-group { display: grid; gap: 8px; }
+.combo-included-group > span { font-weight: 900; color: var(--ink); }
+.combo-included-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #0f0e0d; }
+.combo-included-item small { color: var(--muted); font-weight: 800; }
+.combo-included-item b { color: var(--gold); }
 .schedule-box { display: grid; gap: 10px; margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #141210; }
 .schedule-row { display: grid; grid-template-columns: 1fr 130px 130px; gap: 10px; align-items: center; }
 .map-preview { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 150px; margin-top: 16px; padding: 18px; border: 1px solid rgba(241,184,75,.3); border-radius: 8px; background: linear-gradient(135deg, rgba(241,184,75,.16), rgba(54,166,106,.12)); }

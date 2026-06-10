@@ -138,6 +138,28 @@ function detailFlavorOptions(combo) {
   return comboFlavorProducts(combo).map(product => `<option value="${product.id}">${product.name} - ${money(product.price)}</option>`).join('') || '<option value="">Nenhum sabor disponivel</option>';
 }
 
+function comboIncludedGroups(combo) {
+  if (!combo?.comboProductIds?.length) return '';
+  const selected = products.filter(product => combo.comboProductIds.includes(product.id) && !product.category.startsWith('Pizzas') && !product.outOfStock);
+  if (!selected.length) return '';
+  const groups = selected.reduce((result, product) => {
+    if (!result[product.category]) result[product.category] = [];
+    result[product.category].push(product);
+    return result;
+  }, {});
+  return `
+    <div class="combo-included">
+      <strong>Tambem incluso no combo</strong>
+      ${Object.entries(groups).map(([category, items]) => `
+        <section class="combo-included-group">
+          <span>${category}</span>
+          ${items.map(item => `<div class="combo-included-item"><small>${item.name}</small><b>${money(item.price)}</b></div>`).join('')}
+        </section>
+      `).join('')}
+    </div>
+  `;
+}
+
 function comboSelectionPrice(combo) {
   const mode = $('#detailPizzaMode')?.value || 'whole';
   const flavorA = products.find(item => item.id === Number($('#detailFlavorA')?.value));
@@ -167,7 +189,7 @@ function renderProductDetail() {
   const product = products.find(item => item.id === state.detailProductId);
   const detail = $('#productDetail');
   if (!detail || !product || !store.isOpen) { closeProductDetail(); return; }
-  const comboBuilder = isComboProduct(product) && product.comboAllowHalf;
+  const comboBuilder = isComboProduct(product) && comboFlavorProducts(product).length > 0;
   detail.innerHTML = `
     <section class="product-detail-screen" role="dialog" aria-modal="true" aria-label="Detalhes do produto">
       <button class="detail-close" type="button" data-close-detail aria-label="Fechar">x</button>
@@ -177,11 +199,15 @@ function renderProductDetail() {
         <div class="product-meta"><h2>${product.name}</h2>${comboBuilder ? `<span class="product-price" id="detailComboPrice">${money(product.price)}</span>` : `<span class="product-price">${money(product.price)}</span>`}</div>
         <p>${product.desc}</p>
         <div class="ingredients">Ingredientes: ${product.ingredients}</div>
+        ${isComboProduct(product) ? comboIncludedGroups(product) : ''}
         ${comboBuilder ? `
-          <label>Tipo<select id="detailPizzaMode"><option value="whole">Pizza inteira de um sabor</option><option value="half">Meio a meio</option></select></label>
-          <label id="detailFlavorALabel">Sabor<select id="detailFlavorA">${detailFlavorOptions(product)}</select></label>
+          <div class="combo-pizza-builder">
+            <strong>Escolha a pizza do combo</strong>
+            <label>Quantidade de sabores<select id="detailPizzaMode"><option value="whole">1 sabor</option><option value="half">2 sabores meio a meio</option></select></label>
+            <label id="detailFlavorALabel">Sabor<select id="detailFlavorA">${detailFlavorOptions(product)}</select></label>
+          </div>
           <label id="detailFlavorBLabel" class="hidden">Segundo sabor<select id="detailFlavorB">${detailFlavorOptions(product)}</select></label>
-          <small class="price-hint">Meio a meio calcula a media dos dois sabores escolhidos.</small>
+          <small class="price-hint">Voce pode escolher no maximo dois sabores de pizza para este combo.</small>
         ` : ''}
         <label>Quantidade<input id="detailQty" type="number" min="1" max="20" value="1" /></label>
         <button class="button primary full" type="button" data-detail-add="${product.id}">Adicionar ao carrinho</button>
@@ -321,7 +347,7 @@ function addDetailToCart(productId) {
   const product = products.find(item => item.id === Number(productId));
   const qty = Math.max(1, Number($('#detailQty')?.value || 1));
   if (!product) return;
-  if (isComboProduct(product) && product.comboAllowHalf) {
+  if (isComboProduct(product) && comboFlavorProducts(product).length > 0) {
     const mode = $('#detailPizzaMode')?.value || 'whole';
     const flavorA = products.find(item => item.id === Number($('#detailFlavorA')?.value));
     const flavorB = products.find(item => item.id === Number($('#detailFlavorB')?.value));

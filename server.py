@@ -577,18 +577,19 @@ def create_order(payload):
             qty = max(1, int(raw_item.get('qty') or 1))
             if raw_item.get('customType') == 'comboPizza':
                 combo = conn.execute('''
-                    SELECT p.id, p.name, p.price, p.combo_allow_half, c.name AS category
+                    SELECT p.id, p.name, p.price, p.combo_allow_half, p.combo_product_ids, c.name AS category
                     FROM products p JOIN categories c ON c.id = p.category_id
                     WHERE p.id = ? AND p.available = 1 AND p.out_of_stock = 0 AND p.combo_product_ids != '[]'
                 ''', (int(raw_item.get('comboId')),)).fetchone()
                 if not combo:
                     raise ValueError('Combo indisponivel')
                 mode = str(raw_item.get('mode') or 'whole')
-                if mode == 'half' and not combo['combo_allow_half']:
-                    raise ValueError('Este combo nao permite meio a meio')
                 flavor_ids = [int(raw_item.get('flavorA') or 0)]
                 if mode == 'half':
                     flavor_ids.append(int(raw_item.get('flavorB') or 0))
+                combo_allowed_ids = [int(item) for item in json.loads(combo['combo_product_ids'] or '[]') if str(item).isdigit()]
+                if any(flavor_id not in combo_allowed_ids for flavor_id in flavor_ids):
+                    raise ValueError('Sabor nao pertence a este combo')
                 placeholders = ','.join('?' for _ in flavor_ids)
                 flavors = conn.execute(f'''
                     SELECT p.id, p.name, p.price, c.name AS category
@@ -761,18 +762,25 @@ def update_product(product_id, payload):
 
 def delete_product(product_id):
     with db() as conn:
-        if not conn.execute('SELECT id FROM products WHERE id = ?', (product_id,)).fetchone():
+        product = conn.execute('SELECT id, combo_product_ids FROM products WHERE id = ?', (product_id,)).fetchone()
+        if not product:
             return False
+        is_combo = bool(json.loads(product['combo_product_ids'] or '[]'))
         order_count = conn.execute('SELECT COUNT(*) AS total FROM order_items WHERE product_id = ?', (product_id,)).fetchone()['total']
-        if order_count:
+        if order_count and not is_combo:
             raise ValueError('Este produto ja possui historico de pedidos. Use Ocultar para remover do cardapio sem apagar o historico.')
         for combo in conn.execute('SELECT id, combo_product_ids FROM products WHERE combo_product_ids != ?', ('[]',)):
             try:
                 combo_ids = [int(item) for item in json.loads(combo['combo_product_ids'] or '[]')]
             except Exception:
                 combo_ids = []
-            if product_id in combo_ids:
+            if product_id in combo_ids and int(combo['id']) != product_id:
                 raise ValueError('Este produto esta vinculado a um combo. Remova ele dos combos antes de excluir.')
+        if is_combo and order_count:
+            conn.execute('PRAGMA foreign_keys = OFF')
+            conn.execute('DELETE FROM products WHERE id = ?', (product_id,))
+            conn.execute('PRAGMA foreign_keys = ON')
+            return True
         conn.execute('DELETE FROM products WHERE id = ?', (product_id,))
         return True
 
