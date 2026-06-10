@@ -218,12 +218,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shad
 .add-btn:disabled, .button:disabled { opacity: .55; cursor: not-allowed; }
 .store-closed .order-action { display: none !important; }
 .store-closed .product-card .add-btn { display: none; }
-.product-detail, .pix-step { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 18px; background: rgba(0,0,0,.78); backdrop-filter: blur(10px); }
+.product-detail, .pix-step { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 18px; background: rgba(0,0,0,.78); backdrop-filter: blur(10px); overflow-y: auto; }
 .product-detail.hidden, .pix-step.hidden { display: none; }
-.product-detail-screen { position: relative; display: grid; grid-template-columns: minmax(260px, .9fr) minmax(300px, 1fr); width: min(980px, 100%); max-height: min(760px, calc(100vh - 36px)); overflow: hidden; border: 1px solid rgba(241,184,75,.28); border-radius: 8px; background: linear-gradient(180deg, #191614, #0f0e0d); box-shadow: 0 28px 80px rgba(0,0,0,.72); }
+.product-detail-screen { position: relative; display: grid; grid-template-columns: minmax(260px, .9fr) minmax(300px, 1fr); width: min(980px, 100%); max-height: none; min-height: 0; overflow: visible; border: 1px solid rgba(241,184,75,.28); border-radius: 8px; background: linear-gradient(180deg, #191614, #0f0e0d); box-shadow: 0 28px 80px rgba(0,0,0,.72); }
 .detail-close { position: absolute; top: 12px; right: 12px; z-index: 2; width: 42px; height: 42px; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; background: rgba(0,0,0,.62); color: #fff; font-size: 20px; font-weight: 900; }
 .detail-media { min-height: 420px; background-size: cover; background-position: center; }
-.detail-content { display: grid; gap: 13px; align-content: start; padding: 28px; overflow-y: auto; }
+.detail-content { display: grid; gap: 13px; align-content: start; padding: 28px; overflow: visible; }
 .detail-content h2 { margin: 0; font-size: 30px; line-height: 1.08; }
 .detail-category { width: fit-content; padding: 6px 10px; border-radius: 8px; background: rgba(241,184,75,.14); color: var(--gold); font-weight: 900; font-size: 12px; }
 .detail-content label { display: grid; gap: 6px; color: var(--ink); font-weight: 800; }
