@@ -360,20 +360,32 @@ def send_security_email(email, code):
 def should_log_recovery_codes():
     return str(os.environ.get('GABRIEL_LOG_RECOVERY_CODES') or '').strip().lower() in {'1', 'true', 'sim', 'yes'}
 
+def configured_recovery_code():
+    code = str(os.environ.get('GABRIEL_RECOVERY_CODE') or '').strip()
+    return code if len(code) >= 4 else ''
+
 def request_admin_password_code(payload):
     email = str(payload.get('email') or '').strip().lower()
     credentials = admin_credentials()
     print(f'Password recovery requested for {email}', flush=True)
     if email != credentials['email'].lower():
         raise ValueError('E-mail administrativo nao encontrado')
-    code = f"{random.randint(0, 999999):06d}"
-    expires_at = time.time() + 600
+    recovery_code = configured_recovery_code()
+    code = recovery_code or f"{random.randint(0, 999999):06d}"
+    expires_at = time.time() + (15 * 60)
     with db() as conn:
         conn.execute('UPDATE admin_password_resets SET used = 1 WHERE email = ? AND used = 0', (credentials['email'],))
         conn.execute(
             'INSERT INTO admin_password_resets (email, code, expires_at, used) VALUES (?, ?, ?, 0)',
             (credentials['email'], code, expires_at)
         )
+    if recovery_code:
+        return {
+            'ok': True,
+            'email': credentials['email'],
+            'emailSent': False,
+            'message': 'Use o codigo de recuperacao configurado no Render para definir a nova senha.'
+        }
     email_sent = send_security_email(credentials['email'], code)
     print(f'Password recovery emailSent={email_sent}', flush=True)
     response = {'ok': True, 'email': credentials['email'], 'emailSent': email_sent}
@@ -420,12 +432,16 @@ def request_admin_email_code(payload):
     new_email = str(payload.get('newEmail') or '').strip().lower()
     if '@' not in new_email or '.' not in new_email:
         raise ValueError('Informe um novo e-mail valido')
-    code = f"{random.randint(0, 999999):06d}"
+    recovery_code = configured_recovery_code()
+    code = recovery_code or f"{random.randint(0, 999999):06d}"
     expires_at = time.time() + 15 * 60
-    sent = send_security_email(new_email, code)
+    sent = False if recovery_code else send_security_email(new_email, code)
     with db() as conn:
         conn.execute('INSERT INTO admin_email_resets (current_email, new_email, code, expires_at) VALUES (?, ?, ?, ?)', (credentials['email'], new_email, code, expires_at))
     result = {'ok': True, 'emailSent': sent, 'newEmail': new_email}
+    if recovery_code:
+        result['message'] = 'Use o codigo de recuperacao configurado no Render para confirmar a troca de e-mail.'
+        return result
     if not sent:
         if should_log_recovery_codes():
             print(f'Admin email change code for {new_email}: {code}', flush=True)

@@ -14,7 +14,15 @@ No Render:
 
 ## 2. Variaveis de ambiente
 
-Para recuperacao de senha por e-mail no Render, prefira Resend:
+Para a recuperacao de senha simples, sem depender de e-mail, configure:
+
+```text
+GABRIEL_RECOVERY_CODE=123456
+```
+
+Quando clicar em "Enviar codigo" na tela de recuperacao, use esse codigo para definir a nova senha. Troque `123456` por um codigo seu, com pelo menos 4 caracteres.
+
+Para recuperacao por e-mail no Render, prefira Resend:
 
 ```text
 RESEND_API_KEY=sua-chave-da-resend
