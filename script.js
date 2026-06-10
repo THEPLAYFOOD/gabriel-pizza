@@ -6,7 +6,7 @@ let coupons = [];
 
 const screenIds = ['cardapio', 'pedido', 'admin', 'inicio'];
 const state = { category: 'Todos', query: '', cart: [], activeComboId: null, detailProductId: null, deliveryQuote: null };
-const adminState = { token: localStorage.getItem('adminToken') || '', email: localStorage.getItem('adminEmail') || '', products: [], categories: [], knownOrderIds: new Set(), orderPoller: null, firstOrdersLoad: true };
+const adminState = { token: localStorage.getItem('adminToken') || '', email: localStorage.getItem('adminEmail') || '', products: [], categories: [], knownOrderIds: new Set(), orderPoller: null, firstOrdersLoad: true, activePanel: 'dashboard' };
 const money = value => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const $ = selector => document.querySelector(selector);
 
@@ -130,6 +130,10 @@ function comboFlavorProducts(combo) {
   return allowed.length ? allowed : pizzaProducts();
 }
 
+function isComboProduct(product) {
+  return product?.category === 'Combos' || Boolean(product?.comboProductIds?.length);
+}
+
 function detailFlavorOptions(combo) {
   return comboFlavorProducts(combo).map(product => `<option value="${product.id}">${product.name} - ${money(product.price)}</option>`).join('');
 }
@@ -163,7 +167,7 @@ function renderProductDetail() {
   const product = products.find(item => item.id === state.detailProductId);
   const detail = $('#productDetail');
   if (!detail || !product || !store.isOpen) { closeProductDetail(); return; }
-  const comboBuilder = product.category === 'Combos' && product.comboAllowHalf;
+  const comboBuilder = isComboProduct(product) && product.comboAllowHalf;
   detail.innerHTML = `
     <section class="product-detail-screen" role="dialog" aria-modal="true" aria-label="Detalhes do produto">
       <button class="detail-close" type="button" data-close-detail aria-label="Fechar">x</button>
@@ -213,7 +217,7 @@ function renderProducts() {
         <div class="product-meta"><h3>${product.name}</h3><span class="product-price">${money(product.price)}</span></div>
         <p>${product.desc}</p>
         <div class="ingredients">Ingredientes: ${product.ingredients}</div>
-        ${store.isOpen ? `<button class="add-btn" data-detail="${product.id}">${product.category === 'Combos' && product.comboAllowHalf ? 'Escolher combo' : 'Ver produto'}</button>` : ''}
+        ${store.isOpen ? `<button class="add-btn" data-detail="${product.id}">${isComboProduct(product) ? 'Escolher combo' : 'Ver produto'}</button>` : ''}
       </div>
     </article>
   `).join('') || '<p class="empty">Nenhum produto encontrado.</p>';
@@ -316,7 +320,7 @@ function addDetailToCart(productId) {
   const product = products.find(item => item.id === Number(productId));
   const qty = Math.max(1, Number($('#detailQty')?.value || 1));
   if (!product) return;
-  if (product.category === 'Combos' && product.comboAllowHalf) {
+  if (isComboProduct(product) && product.comboAllowHalf) {
     const mode = $('#detailPizzaMode')?.value || 'whole';
     const flavorA = products.find(item => item.id === Number($('#detailFlavorA')?.value));
     const flavorB = products.find(item => item.id === Number($('#detailFlavorB')?.value));
@@ -836,7 +840,7 @@ async function loadAdminCatalog() {
 }
 
 function productForm(product = {}) {
-  const categoryOptions = adminState.categories.map(category => `<option value="${category.id}" ${category.id === product.categoryId ? 'selected' : ''}>${category.name}</option>`).join('');
+  const categoryOptions = adminState.categories.map(category => `<option value="${category.id}" ${category.id === product.categoryId ? 'selected' : ''}>${category.name}${category.active ? '' : ' (oculta)'}</option>`).join('');
   return `
     <form id="adminProductForm" class="admin-form" data-edit-id="${product.id || ''}">
       <h3>${product.id ? 'Editar produto' : 'Cadastrar produto'}</h3>
@@ -860,7 +864,7 @@ function productForm(product = {}) {
 function productsTable() {
   return `
     <table><thead><tr><th>Produto</th><th>Categoria</th><th>Preco</th><th>Status</th><th>Acoes</th></tr></thead><tbody>
-      ${adminState.products.map(product => `<tr><td>${product.name}</td><td>${product.category}</td><td>${money(product.price)}</td><td>${product.available ? 'Disponivel' : 'Oculto'}</td><td><button data-edit-product="${product.id}">Editar</button><button data-toggle-product="${product.id}">${product.available ? 'Ocultar' : 'Reativar'}</button></td></tr>`).join('')}
+      ${adminState.products.map(product => `<tr><td>${product.name}</td><td>${product.category}</td><td>${money(product.price)}</td><td>${product.available ? 'Disponivel' : 'Oculto'}</td><td><button data-edit-product="${product.id}">Editar</button><button data-toggle-product="${product.id}">${product.available ? 'Ocultar' : 'Reativar'}</button><button data-delete-product="${product.id}">Excluir</button></td></tr>`).join('')}
     </tbody></table>
   `;
 }
@@ -868,8 +872,10 @@ function productsTable() {
 
 function comboForm(combo = {}) {
   const comboCategory = adminState.categories.find(category => category.name === 'Combos') || adminState.categories[0];
+  const selectedCategoryId = combo.categoryId || comboCategory?.id || '';
+  const categoryOptions = adminState.categories.map(category => `<option value="${category.id}" ${category.id === selectedCategoryId ? 'selected' : ''}>${category.name}${category.active ? '' : ' (oculta)'}</option>`).join('');
   const selectedComboProducts = combo.comboProductIds || [];
-  const choices = adminState.products.filter(product => product.available && product.category !== 'Combos').map(product => `
+  const choices = adminState.products.filter(product => product.available && !isComboProduct(product)).map(product => `
     <label class="admin-check"><input type="checkbox" name="comboProduct" value="${product.id}" ${selectedComboProducts.includes(product.id) ? 'checked' : ''} /> ${product.name} - ${money(product.price)}</label>
   `).join('');
   return `
@@ -877,9 +883,9 @@ function comboForm(combo = {}) {
       <h3>${combo.id ? 'Editar combo' : 'Criar combo'}</h3>
       <div class="form-grid">
         <label>Nome do combo<input name="name" value="${combo.name || ''}" placeholder="Ex: Combo Familia Especial" required /></label>
+        <label>Categoria onde aparece<select name="categoryId" required>${categoryOptions}</select></label>
         <label>Valor do combo<input name="price" type="number" min="0.01" step="0.01" value="${combo.price || ''}" placeholder="Ex: 89.90" required /></label>
         <label class="admin-check combo-switch"><input type="checkbox" name="comboAllowHalf" ${combo.comboAllowHalf ? 'checked' : ''} /> Permitir pizza meio a meio para o cliente</label>
-        <input name="categoryId" type="hidden" value="${comboCategory?.id || ''}" />
         <input name="currentImage" type="hidden" value="${combo.image || ''}" />
         <label class="wide">Imagem do computador<input name="imageFile" type="file" accept="image/*" /></label>
         <div class="wide combo-choice-list">${choices}</div>
@@ -919,10 +925,10 @@ async function submitComboForm(form) {
 
 function combosTable() {
   const rows = adminState.products
-    .filter(product => product.category === 'Combos')
-    .map(product => `<tr><td>${product.name}</td><td>${product.comboAllowHalf ? 'Permite meio a meio' : 'Combo comum'}</td><td>${money(product.price)}</td><td>${product.available ? 'Disponivel' : 'Oculto'}</td><td><button data-edit-combo="${product.id}">Editar</button><button data-toggle-product="${product.id}">${product.available ? 'Ocultar' : 'Reativar'}</button></td></tr>`)
-    .join('') || '<tr><td colspan="5">Nenhum combo cadastrado.</td></tr>';
-  return `<table><thead><tr><th>Combo</th><th>Tipo</th><th>Preco</th><th>Status</th><th>Acoes</th></tr></thead><tbody>${rows}</tbody></table>`;
+    .filter(product => isComboProduct(product))
+    .map(product => `<tr><td>${product.name}</td><td>${product.category}</td><td>${product.comboAllowHalf ? 'Permite meio a meio' : 'Combo comum'}</td><td>${money(product.price)}</td><td>${product.available ? 'Disponivel' : 'Oculto'}</td><td><button data-edit-combo="${product.id}">Editar</button><button data-toggle-product="${product.id}">${product.available ? 'Ocultar' : 'Reativar'}</button><button data-delete-product="${product.id}">Excluir</button></td></tr>`)
+    .join('') || '<tr><td colspan="6">Nenhum combo cadastrado.</td></tr>';
+  return `<table><thead><tr><th>Combo</th><th>Categoria</th><th>Tipo</th><th>Preco</th><th>Status</th><th>Acoes</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function weeklyHoursFields() {
@@ -964,6 +970,7 @@ function categoryForm(category = null) {
 async function renderAdminPanel(panel) {
   const output = $('#adminPanelOutput');
   if (!output) return;
+  adminState.activePanel = panel;
   try {
     if (['products', 'categories', 'combos'].includes(panel)) await loadAdminCatalog();
     const panels = {
@@ -1043,10 +1050,19 @@ async function toggleProduct(productId) {
   renderCategories();
   renderProducts();
   renderCart();
-  await renderAdminPanel('products');
+  await renderAdminPanel(adminState.activePanel === 'combos' ? 'combos' : 'products');
 }
 
-async function deleteProduct(productId) { return toggleProduct(productId); }
+async function deleteProduct(productId) {
+  if (!confirm('Excluir este item definitivamente? Se ele ja tiver pedidos no historico, use Ocultar.')) return;
+  await adminFetch(`/api/admin/products/${productId}`, { method: 'DELETE' });
+  state.cart = state.cart.filter(item => item.id !== Number(productId));
+  await loadMenu();
+  renderCategories();
+  renderProducts();
+  renderCart();
+  await renderAdminPanel(adminState.activePanel === 'combos' ? 'combos' : 'products');
+}
 
 async function submitCategoryForm(form) {
   const formData = new FormData(form);
@@ -1079,6 +1095,7 @@ async function toggleCategory(categoryId) {
 }
 
 async function deleteCategory(categoryId) {
+  if (!confirm('Excluir esta categoria definitivamente? Se houver produtos nela, mova ou exclua os produtos primeiro.')) return;
   adminState.categories = await adminFetch(`/api/admin/categories/${categoryId}`, { method: 'DELETE' });
   await loadMenu();
   await loadAdminCatalog();

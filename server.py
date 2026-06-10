@@ -748,8 +748,17 @@ def delete_product(product_id):
     with db() as conn:
         if not conn.execute('SELECT id FROM products WHERE id = ?', (product_id,)).fetchone():
             return False
-        # Mantem historico de pedidos intacto; remove o produto do cardapio.
-        conn.execute('UPDATE products SET available = 0 WHERE id = ?', (product_id,))
+        order_count = conn.execute('SELECT COUNT(*) AS total FROM order_items WHERE product_id = ?', (product_id,)).fetchone()['total']
+        if order_count:
+            raise ValueError('Este produto ja possui historico de pedidos. Use Ocultar para remover do cardapio sem apagar o historico.')
+        for combo in conn.execute('SELECT id, combo_product_ids FROM products WHERE combo_product_ids != ?', ('[]',)):
+            try:
+                combo_ids = [int(item) for item in json.loads(combo['combo_product_ids'] or '[]')]
+            except Exception:
+                combo_ids = []
+            if product_id in combo_ids:
+                raise ValueError('Este produto esta vinculado a um combo. Remova ele dos combos antes de excluir.')
+        conn.execute('DELETE FROM products WHERE id = ?', (product_id,))
         return True
 
 def create_category(payload):
@@ -776,9 +785,8 @@ def delete_category(category_id):
     with db() as conn:
         products_count = conn.execute('SELECT COUNT(*) AS total FROM products WHERE category_id = ?', (category_id,)).fetchone()['total']
         if products_count:
-            result = conn.execute('UPDATE categories SET active = 0 WHERE id = ?', (category_id,))
-        else:
-            result = conn.execute('DELETE FROM categories WHERE id = ?', (category_id,))
+            raise ValueError('Esta categoria possui produtos vinculados. Mova, exclua ou oculte os produtos antes de excluir a categoria.')
+        result = conn.execute('DELETE FROM categories WHERE id = ?', (category_id,))
         return result.rowcount > 0
 
 
