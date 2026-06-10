@@ -188,9 +188,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shad
 .admin-form input[type="file"] { padding: 10px; background: #171310; border: 1px dashed rgba(241,184,75,.34); }
 .half-card { border-color: rgba(241,184,75,.42); }
 .half-card label { color: var(--ink); }
-.combo-choice-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #141210; }
-.combo-choice-list .admin-check { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #0f0e0d; }
-@media (max-width: 680px) { .combo-choice-list { grid-template-columns: 1fr; } }
+.combo-choice-list { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #141210; }
+.combo-category-group { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #0f0e0d; opacity: .72; }
+.combo-category-group.enabled { border-color: rgba(241,184,75,.45); opacity: 1; }
+.combo-category-toggle { font-size: 16px; font-weight: 900; color: var(--gold); }
+.combo-category-products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.combo-category-group:not(.enabled) .combo-category-products { display: none; }
+.combo-category-products .admin-check { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #171310; }
+@media (max-width: 680px) { .combo-category-products { grid-template-columns: 1fr; } }
 .schedule-box { display: grid; gap: 10px; margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #141210; }
 .schedule-row { display: grid; grid-template-columns: 1fr 130px 130px; gap: 10px; align-items: center; }
 .map-preview { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 150px; margin-top: 16px; padding: 18px; border: 1px solid rgba(241,184,75,.3); border-radius: 8px; background: linear-gradient(135deg, rgba(241,184,75,.16), rgba(54,166,106,.12)); }

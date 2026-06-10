@@ -877,9 +877,33 @@ function comboForm(combo = {}) {
   const selectedCategoryId = combo.categoryId || comboCategory?.id || '';
   const categoryOptions = adminState.categories.map(category => `<option value="${category.id}" ${category.id === selectedCategoryId ? 'selected' : ''}>${category.name}${category.active ? '' : ' (oculta)'}</option>`).join('');
   const selectedComboProducts = combo.comboProductIds || [];
-  const choices = adminState.products.filter(product => !product.outOfStock && !isComboProduct(product)).map(product => `
-    <label class="admin-check"><input type="checkbox" name="comboProduct" value="${product.id}" ${selectedComboProducts.includes(product.id) ? 'checked' : ''} /> ${product.name} - ${money(product.price)}${product.available ? '' : ' (oculto no cardapio)'}</label>
-  `).join('');
+  const groupedProducts = adminState.products
+    .filter(product => !product.outOfStock && !isComboProduct(product))
+    .reduce((groups, product) => {
+      if (!groups[product.category]) groups[product.category] = [];
+      groups[product.category].push(product);
+      return groups;
+    }, {});
+  const choices = Object.entries(groupedProducts).map(([categoryName, items], index) => {
+    const categoryId = `comboCategory${index}`;
+    const enabled = items.some(product => selectedComboProducts.includes(product.id));
+    return `
+      <section class="combo-category-group ${enabled ? 'enabled' : ''}" data-combo-category-group>
+        <label class="admin-check combo-category-toggle">
+          <input type="checkbox" id="${categoryId}" data-combo-category-toggle ${enabled ? 'checked' : ''} />
+          ${categoryName}
+        </label>
+        <div class="combo-category-products">
+          ${items.map(product => `
+            <label class="admin-check">
+              <input type="checkbox" name="comboProduct" value="${product.id}" ${selectedComboProducts.includes(product.id) ? 'checked' : ''} ${enabled ? '' : 'disabled'} />
+              ${product.name} - ${money(product.price)}${product.available ? '' : ' (oculto no cardapio)'}
+            </label>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  }).join('') || '<p class="empty">Nenhum produto disponivel para montar combo.</p>';
   return `
     <form id="adminComboForm" class="admin-form" data-edit-id="${combo.id || ''}">
       <h3>${combo.id ? 'Editar combo' : 'Criar combo'}</h3>
@@ -1120,6 +1144,16 @@ async function deleteCategory(categoryId) {
   renderCategories();
   renderProducts();
   await renderAdminPanel('categories');
+}
+
+function toggleComboCategory(input) {
+  const group = input.closest('[data-combo-category-group]');
+  if (!group) return;
+  group.classList.toggle('enabled', input.checked);
+  group.querySelectorAll('input[name="comboProduct"]').forEach(productInput => {
+    productInput.disabled = !input.checked;
+    if (!input.checked) productInput.checked = false;
+  });
 }
 
 async function submitStoreForm(form) {
@@ -1374,6 +1408,8 @@ document.addEventListener('submit', event => {
 document.addEventListener('change', event => {
   if (event.target.closest('#halfFlavorA') || event.target.closest('#halfFlavorB') || event.target.closest('#pizzaBuildMode')) updateHalfPizzaPrice();
   if (event.target.closest('#detailPizzaMode') || event.target.closest('#detailFlavorA') || event.target.closest('#detailFlavorB')) syncDetailMode();
+  const comboCategoryToggle = event.target.closest('[data-combo-category-toggle]');
+  if (comboCategoryToggle) toggleComboCategory(comboCategoryToggle);
   const statusSelect = event.target.closest('[data-order-status]');
   if (statusSelect) updateOrderStatus(statusSelect.dataset.orderStatus, statusSelect.value).catch(error => alert(error.message));
 });
