@@ -793,8 +793,8 @@ def admin_products():
 def admin_categories():
     with db() as conn:
         return [
-            {'id': row['id'], 'name': row['name'], 'sortOrder': row['sortOrder'], 'active': bool(row['active']), 'allowHalf': bool(row['allowHalf'])}
-            for row in conn.execute('SELECT id, name, sort_order AS sortOrder, active, allow_half AS allowHalf FROM categories ORDER BY sort_order, name')
+            {'id': row['id'], 'name': row['name'], 'sortOrder': row['sort_order'], 'active': bool(row['active']), 'allowHalf': bool(row['allow_half'])}
+            for row in conn.execute('SELECT id, name, sort_order, active, allow_half FROM categories ORDER BY sort_order, name')
         ]
 
 def require_text(payload, key):
