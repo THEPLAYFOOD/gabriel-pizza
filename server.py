@@ -250,14 +250,23 @@ def send_security_email(email, code):
         "Esse codigo expira em 10 minutos. Se voce nao solicitou, ignore este e-mail."
     )
     context = ssl.create_default_context()
+    if port == 465:
+        try:
+            with smtplib.SMTP_SSL(host, port, timeout=15, context=context) as smtp:
+                smtp.login(user, password)
+                smtp.send_message(message)
+            return True
+        except Exception as error:
+            print(f'SMTP SSL error: {type(error).__name__}: {error}')
+            return False
     try:
         with smtplib.SMTP(host, port, timeout=15) as smtp:
             smtp.starttls(context=context)
             smtp.login(user, password)
             smtp.send_message(message)
         return True
-    except OSError:
-        pass
+    except Exception as error:
+        print(f'SMTP STARTTLS error: {type(error).__name__}: {error}')
     try:
         addresses = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
     except OSError:
@@ -284,6 +293,7 @@ def send_security_email(email, code):
             smtp.quit()
             return True
         except Exception:
+            print('SMTP IPv4 fallback failed')
             try:
                 if smtp:
                     smtp.close()
