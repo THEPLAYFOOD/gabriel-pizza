@@ -139,7 +139,7 @@ function detailFlavorOptions(combo) {
 }
 
 function comboAllowsHalf(combo) {
-  return comboFlavorProducts(combo).some(product => product.categoryAllowHalf);
+  return comboFlavorProducts(combo).some(product => product.categoryAllowHalf || product.category.startsWith('Pizzas'));
 }
 
 function comboIncludedGroups(combo) {

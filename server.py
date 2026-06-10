@@ -604,7 +604,7 @@ def create_order(payload):
                     raise ValueError('Sabores do combo invalidos')
                 by_id = {flavor['id']: flavor for flavor in flavors}
                 selected_flavors = [by_id[flavor_id] for flavor_id in flavor_ids]
-                if mode == 'half' and not any(flavor['category_allow_half'] for flavor in selected_flavors):
+                if mode == 'half' and not any(flavor['category_allow_half'] or str(flavor['category']).startswith('Pizzas') for flavor in selected_flavors):
                     raise ValueError('Esta categoria nao permite meio a meio')
                 price = round(sum(float(flavor['price']) for flavor in selected_flavors) / len(selected_flavors), 2)
                 if mode == 'half':
