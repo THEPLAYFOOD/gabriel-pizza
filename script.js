@@ -82,15 +82,19 @@ function renderStoreStatus() {
 }
 
 function renderCategories() {
-  $('#categoryTabs').innerHTML = categories.map(category => `<button class="${category === state.category ? 'active' : ''}" data-category="${category}">${category}</button>`).join('');
+  $('#categoryTabs').innerHTML = customerCategories().map(category => `<button class="${category === state.category ? 'active' : ''}" data-category="${category}">${category}</button>`).join('');
+}
+
+function customerCategories() {
+  return categories.filter(category => category !== 'Todos');
 }
 
 function firstCustomerCategory() {
-  return categories.find(category => category !== 'Todos') || 'Todos';
+  return customerCategories()[0] || 'Todos';
 }
 
 function syncSelectedCategory() {
-  if (!categories.includes(state.category)) state.category = firstCustomerCategory();
+  if (state.category === 'Todos' || !categories.includes(state.category)) state.category = firstCustomerCategory();
 }
 
 function renderCondominiumOptions() {
@@ -255,7 +259,7 @@ function renderProducts() {
   const query = state.query.trim().toLowerCase();
   const visible = products.filter(product => {
     if (product.visibleInMenu === false || product.outOfStock) return false;
-    const matchesCategory = state.category === 'Todos' || product.category === state.category;
+    const matchesCategory = state.category === 'Todos' || !customerCategories().length || product.category === state.category;
     const matchesQuery = !query || [product.name, product.desc, product.ingredients].join(' ').toLowerCase().includes(query);
     return matchesCategory && matchesQuery;
   });
