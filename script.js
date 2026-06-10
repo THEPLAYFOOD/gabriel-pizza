@@ -4,7 +4,7 @@ let store = { name: 'Gabriel Pizza', description: 'Pizzaria artesanal', phone: '
 let deliveryConfig = { commonFee: 8, maxRadiusKm: 8, perKmFee: 1, condominiums: [{ id: 'reserva-garcas-1', name: 'Condominio Reserva das Garcas 1', fee: 4 }] };
 let coupons = [];
 
-const screenIds = ['cardapio', 'pedido', 'admin', 'inicio'];
+const screenIds = ['cardapio', 'produto', 'pedido', 'admin', 'inicio'];
 const state = { category: 'Todos', query: '', cart: [], activeComboId: null, detailProductId: null, deliveryQuote: null };
 const adminState = { token: localStorage.getItem('adminToken') || '', email: localStorage.getItem('adminEmail') || '', products: [], categories: [], knownOrderIds: new Set(), orderPoller: null, firstOrdersLoad: true, activePanel: 'dashboard' };
 const money = value => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -31,9 +31,14 @@ function routeToScreen() {
     window.location.hash = '#cardapio';
     return;
   }
+  if (activeId === 'produto' && !state.detailProductId) {
+    window.location.hash = '#cardapio';
+    return;
+  }
   document.querySelectorAll('.screen').forEach(section => section.classList.toggle('active', section.id === activeId));
   document.querySelectorAll('.desktop-nav a').forEach(link => link.classList.toggle('active', link.getAttribute('href') === `#${activeId}`));
   window.scrollTo({ top: 0, behavior: 'instant' });
+  if (activeId === 'produto') renderProductDetail();
   if (activeId === 'admin') refreshAdminView();
 }
 
@@ -183,27 +188,32 @@ function openProductDetail(productId) {
   const product = products.find(item => item.id === Number(productId));
   if (!product || !store.isOpen) return;
   state.detailProductId = product.id;
+  window.location.hash = '#produto';
   renderProductDetail();
 }
 
 function closeProductDetail() {
   state.detailProductId = null;
   const detail = $('#productDetail');
-  if (!detail) return;
-  detail.classList.add('hidden');
-  detail.setAttribute('aria-hidden', 'true');
-  detail.innerHTML = '';
+  if (detail) {
+    detail.classList.add('hidden');
+    detail.setAttribute('aria-hidden', 'true');
+    detail.innerHTML = '';
+  }
+  const page = $('#productDetailPage');
+  if (page) page.innerHTML = '';
+  if (currentScreenId() === 'produto') window.location.hash = '#cardapio';
 }
 
 function renderProductDetail() {
   const product = products.find(item => item.id === state.detailProductId);
-  const detail = $('#productDetail');
+  const detail = $('#productDetailPage');
   if (!detail || !product || !store.isOpen) { closeProductDetail(); return; }
   const comboBuilder = isComboProduct(product) && comboFlavorProducts(product).length > 0;
   const allowHalf = comboAllowsHalf(product);
   detail.innerHTML = `
-    <section class="product-detail-screen" role="dialog" aria-modal="true" aria-label="Detalhes do produto">
-      <button class="detail-close" type="button" data-close-detail aria-label="Fechar">x</button>
+    <section class="product-detail-screen" aria-label="Detalhes do produto">
+      <button class="detail-close" type="button" data-close-detail aria-label="Voltar">Voltar</button>
       <div class="detail-media" style="background-image: url('${product.image}')"></div>
       <div class="detail-content">
         <span class="detail-category">${product.category}</span>
@@ -224,8 +234,6 @@ function renderProductDetail() {
       </div>
     </section>
   `;
-  detail.classList.remove('hidden');
-  detail.setAttribute('aria-hidden', 'false');
   syncDetailMode();
 }
 
@@ -370,6 +378,7 @@ function addDetailToCart(productId) {
     addToCart(product.id, null, qty);
   }
   closeProductDetail();
+  window.location.hash = '#pedido';
 }
 
 function changeQty(id, delta) {
