@@ -174,11 +174,20 @@ function comboIncludedGroups(combo) {
       ${Object.entries(groups).map(([category, items]) => `
         <section class="combo-included-group">
           <span>${category}</span>
-          ${items.map(item => `<div class="combo-included-item"><small>${item.name}</small><b>${money(item.price)}</b></div>`).join('')}
+          ${items.map(item => `<div class="combo-included-item"><small>${item.name}</small><b>${comboProductDiscount(combo, item.id) > 0 ? `${money(discountedProductPrice(combo, item))} <em>${money(item.price)}</em>` : money(item.price)}</b></div>`).join('')}
         </section>
       `).join('')}
     </div>
   `;
+}
+
+function comboProductDiscount(combo, productId) {
+  const discounts = combo?.comboProductDiscounts || {};
+  return Math.max(0, Number(discounts[String(productId)] ?? discounts[productId] ?? 0) || 0);
+}
+
+function discountedProductPrice(combo, product) {
+  return Math.max(0, (Number(product?.price) || 0) - comboProductDiscount(combo, product?.id));
 }
 
 function comboExtraProducts(combo) {
@@ -191,8 +200,8 @@ function comboSelectionPrice(combo) {
   const flavorB = products.find(item => item.id === Number($('#detailFlavorB')?.value));
   if (!flavorA) return Number(combo?.price || 0);
   const secondFlavor = comboAllowsHalf(combo) ? (flavorB || flavorA) : flavorA;
-  const pizzaAverage = ((Number(flavorA.price) || 0) + (Number(secondFlavor.price) || 0)) / 2;
-  const extrasTotal = comboExtraProducts(combo).reduce((total, product) => total + (Number(product.price) || 0), 0);
+  const pizzaAverage = (discountedProductPrice(combo, flavorA) + discountedProductPrice(combo, secondFlavor)) / 2;
+  const extrasTotal = comboExtraProducts(combo).reduce((total, product) => total + discountedProductPrice(combo, product), 0);
   return Number((pizzaAverage + extrasTotal).toFixed(2));
 }
 
@@ -905,6 +914,7 @@ function productForm(product = {}) {
         <label>Imagem do computador<input name="imageFile" type="file" accept="image/*" /></label>
         <input name="currentImage" type="hidden" value="${product.image || ''}" />
         <input name="comboProductIdsJson" type="hidden" value="${JSON.stringify(product.comboProductIds || [])}" />
+        <input name="comboProductDiscountsJson" type="hidden" value='${JSON.stringify(product.comboProductDiscounts || {})}' />
         <input name="comboAllowHalfHidden" type="hidden" value="${product.comboAllowHalf ? '1' : '0'}" />
         <label class="wide">Descricao<textarea name="desc" rows="2" required>${product.desc || ''}</textarea></label>
         <label class="wide">Ingredientes<textarea name="ingredients" rows="2" required>${product.ingredients || ''}</textarea></label>
@@ -930,6 +940,7 @@ function comboForm(combo = {}) {
   const selectedCategoryId = combo.categoryId || comboCategory?.id || '';
   const categoryOptions = adminState.categories.map(category => `<option value="${category.id}" ${category.id === selectedCategoryId ? 'selected' : ''}>${category.name}${category.active ? '' : ' (oculta)'}</option>`).join('');
   const selectedComboProducts = combo.comboProductIds || [];
+  const comboDiscounts = combo.comboProductDiscounts || {};
   const groupedProducts = adminState.products
     .filter(product => !product.outOfStock && !isComboProduct(product))
     .reduce((groups, product) => {
@@ -948,12 +959,20 @@ function comboForm(combo = {}) {
         </label>
         <small class="combo-category-hint">Marque a categoria para liberar estes itens no combo.</small>
         <div class="combo-category-products">
-          ${items.map(product => `
-            <label class="admin-check">
-              <input type="checkbox" name="comboProduct" value="${product.id}" ${selectedComboProducts.includes(product.id) ? 'checked' : ''} ${enabled ? '' : 'disabled'} />
-              ${product.name} - ${money(product.price)}${product.available ? '' : ' (oculto no cardapio)'}
-            </label>
-          `).join('')}
+          ${items.map(product => {
+            const checked = selectedComboProducts.includes(product.id);
+            const discount = comboDiscounts[String(product.id)] || comboDiscounts[product.id] || '';
+            return `
+            <div class="combo-product-option">
+              <label class="admin-check">
+                <input type="checkbox" name="comboProduct" value="${product.id}" ${checked ? 'checked' : ''} ${enabled ? '' : 'disabled'} />
+                ${product.name} - ${money(product.price)}${product.available ? '' : ' (oculto no cardapio)'}
+              </label>
+              <label class="combo-discount-control">Desconto neste item
+                <input name="comboDiscount_${product.id}" type="number" min="0" max="${product.price}" step="0.01" value="${discount}" placeholder="R$ 0,00" ${enabled && checked ? '' : 'disabled'} />
+              </label>
+            </div>
+          `}).join('')}
         </div>
       </section>
     `;
@@ -981,6 +1000,11 @@ async function submitComboForm(form) {
   const selectedIds = formData.getAll('comboProduct').map(Number);
   if (!selectedIds.length) throw new Error('Selecione pelo menos um produto para o combo');
   const selected = adminState.products.filter(product => selectedIds.includes(product.id));
+  const comboProductDiscounts = selectedIds.reduce((discounts, productId) => {
+    const value = Math.max(0, Number(formData.get(`comboDiscount_${productId}`) || 0));
+    if (value > 0) discounts[String(productId)] = value;
+    return discounts;
+  }, {});
   const price = Number(formData.get('price') || 0);
   if (price <= 0) throw new Error('Informe o valor do combo');
   const image = await fileToDataUrl(formData.get('imageFile')) || formData.get('currentImage') || selected[0]?.image || '';
@@ -994,6 +1018,7 @@ async function submitComboForm(form) {
     available: true,
     outOfStock: formData.get('outOfStockHidden') === '1',
     comboProductIds: selectedIds,
+    comboProductDiscounts,
     comboAllowHalf: formData.get('comboAllowHalf') === 'on'
   };
   const editId = form.dataset.editId;
@@ -1095,6 +1120,7 @@ async function submitProductForm(form) {
     available: formData.get('available') === 'on',
     outOfStock: formData.get('outOfStock') === 'on',
     comboProductIds: JSON.parse(formData.get('comboProductIdsJson') || '[]'),
+    comboProductDiscounts: JSON.parse(formData.get('comboProductDiscountsJson') || '{}'),
     comboAllowHalf: formData.get('comboAllowHalfHidden') === '1'
   };
   const editId = form.dataset.editId;
@@ -1233,7 +1259,16 @@ function toggleComboCategory(input) {
   group.querySelectorAll('input[name="comboProduct"]').forEach(productInput => {
     productInput.disabled = !input.checked;
     productInput.checked = input.checked;
+    syncComboProductDiscount(productInput);
   });
+}
+
+function syncComboProductDiscount(productInput) {
+  const option = productInput.closest('.combo-product-option');
+  const discountInput = option?.querySelector('.combo-discount-control input');
+  if (!discountInput) return;
+  discountInput.disabled = productInput.disabled || !productInput.checked;
+  if (discountInput.disabled) discountInput.value = '';
 }
 
 async function submitStoreForm(form) {
@@ -1493,6 +1528,8 @@ document.addEventListener('change', event => {
   if (event.target.closest('#detailFlavorA') || event.target.closest('#detailFlavorB')) syncDetailMode();
   const comboCategoryToggle = event.target.closest('[data-combo-category-toggle]');
   if (comboCategoryToggle) toggleComboCategory(comboCategoryToggle);
+  const comboProductInput = event.target.closest('input[name="comboProduct"]');
+  if (comboProductInput) syncComboProductDiscount(comboProductInput);
   const statusSelect = event.target.closest('[data-order-status]');
   if (statusSelect) updateOrderStatus(statusSelect.dataset.orderStatus, statusSelect.value).catch(error => alert(error.message));
 });

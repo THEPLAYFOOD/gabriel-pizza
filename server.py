@@ -97,6 +97,8 @@ def init_db():
         product_columns = [row['name'] for row in conn.execute('PRAGMA table_info(products)')]
         if 'combo_product_ids' not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN combo_product_ids TEXT NOT NULL DEFAULT '[]'")
+        if 'combo_product_discounts' not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN combo_product_discounts TEXT NOT NULL DEFAULT '{}'")
         if 'combo_allow_half' not in product_columns:
             conn.execute('ALTER TABLE products ADD COLUMN combo_allow_half INTEGER NOT NULL DEFAULT 0')
         if 'out_of_stock' not in product_columns:
@@ -202,6 +204,7 @@ def get_menu():
                 'desc': row['description'], 'ingredients': row['ingredients'], 'available': bool(row['available']),
                 'outOfStock': bool(row['out_of_stock']), 'visibleInMenu': bool(row['available']),
                 'image': row['image_url'], 'comboProductIds': json.loads(row['combo_product_ids'] or '[]'),
+                'comboProductDiscounts': parse_json_dict(row['combo_product_discounts'], {}),
                 'comboAllowHalf': bool(row['combo_allow_half']), 'categoryAllowHalf': bool(row['category_allow_half'])
             }
             for row in conn.execute('''
@@ -581,7 +584,7 @@ def create_order(payload):
             qty = max(1, int(raw_item.get('qty') or 1))
             if raw_item.get('customType') == 'comboPizza':
                 combo = conn.execute('''
-                    SELECT p.id, p.name, p.price, p.combo_allow_half, p.combo_product_ids, c.name AS category
+                    SELECT p.id, p.name, p.price, p.combo_allow_half, p.combo_product_ids, p.combo_product_discounts, c.name AS category
                     FROM products p JOIN categories c ON c.id = p.category_id
                     WHERE p.id = ? AND p.available = 1 AND p.out_of_stock = 0 AND p.combo_product_ids != '[]'
                 ''', (int(raw_item.get('comboId')),)).fetchone()
@@ -592,6 +595,7 @@ def create_order(payload):
                 if mode == 'half':
                     flavor_ids.append(int(raw_item.get('flavorB') or 0))
                 combo_allowed_ids = [int(item) for item in json.loads(combo['combo_product_ids'] or '[]') if str(item).isdigit()]
+                combo_discounts = parse_json_dict(combo['combo_product_discounts'], {})
                 if any(flavor_id not in combo_allowed_ids for flavor_id in flavor_ids):
                     raise ValueError('Sabor nao pertence a este combo')
                 placeholders = ','.join('?' for _ in flavor_ids)
@@ -611,12 +615,12 @@ def create_order(payload):
                 if extra_ids:
                     extra_placeholders = ','.join('?' for _ in extra_ids)
                     extras = conn.execute(f'''
-                        SELECT p.price
+                        SELECT p.id, p.price
                         FROM products p JOIN categories c ON c.id = p.category_id
                         WHERE p.id IN ({extra_placeholders}) AND p.out_of_stock = 0 AND c.name NOT LIKE 'Pizzas%'
                     ''', extra_ids).fetchall()
-                    extras_total = sum(float(extra['price']) for extra in extras)
-                pizza_average = sum(float(flavor['price']) for flavor in selected_flavors) / len(selected_flavors)
+                    extras_total = sum(max(0, float(extra['price']) - float(combo_discounts.get(str(extra['id']), 0) or 0)) for extra in extras)
+                pizza_average = sum(max(0, float(flavor['price']) - float(combo_discounts.get(str(flavor['id']), 0) or 0)) for flavor in selected_flavors) / len(selected_flavors)
                 price = round(pizza_average + extras_total, 2)
                 if mode == 'half':
                     name = f"{combo['name']} - meio a meio: {by_id[flavor_ids[0]]['name']} / {by_id[flavor_ids[1]]['name']}"
@@ -714,6 +718,7 @@ def admin_products():
                 'price': row['price'], 'desc': row['description'], 'ingredients': row['ingredients'],
                 'image': row['image_url'], 'available': bool(row['available']), 'outOfStock': bool(row['out_of_stock']),
                 'comboProductIds': json.loads(row['combo_product_ids'] or '[]'),
+                'comboProductDiscounts': parse_json_dict(row['combo_product_discounts'], {}),
                 'comboAllowHalf': bool(row['combo_allow_half']), 'categoryAllowHalf': bool(row['category_allow_half'])
             }
             for row in conn.execute('''
@@ -751,18 +756,29 @@ def product_payload(payload):
     if not isinstance(combo_product_ids, list):
         combo_product_ids = []
     combo_product_ids = [int(item) for item in combo_product_ids if str(item).isdigit()]
+    raw_discounts = payload.get('comboProductDiscounts') or {}
+    if not isinstance(raw_discounts, dict):
+        raw_discounts = {}
+    combo_product_discounts = {}
+    for product_id in combo_product_ids:
+        try:
+            discount = max(0, float(raw_discounts.get(str(product_id), raw_discounts.get(product_id, 0)) or 0))
+        except Exception:
+            discount = 0
+        if discount > 0:
+            combo_product_discounts[str(product_id)] = round(discount, 2)
     combo_allow_half = 1 if payload.get('comboAllowHalf') else 0
-    return category_id, name, price, desc, ingredients, image, available, out_of_stock, combo_product_ids, combo_allow_half
+    return category_id, name, price, desc, ingredients, image, available, out_of_stock, combo_product_ids, combo_product_discounts, combo_allow_half
 
 def create_product(payload):
     with db() as conn:
-        category_id, name, price, desc, ingredients, image, available, out_of_stock, combo_product_ids, combo_allow_half = product_payload(payload)
+        category_id, name, price, desc, ingredients, image, available, out_of_stock, combo_product_ids, combo_product_discounts, combo_allow_half = product_payload(payload)
         if not conn.execute('SELECT id FROM categories WHERE id = ?', (category_id,)).fetchone():
             raise ValueError('Categoria invalida')
         cursor = conn.execute('''
-            INSERT INTO products (category_id, name, price, description, ingredients, image_url, available, out_of_stock, combo_product_ids, combo_allow_half)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (category_id, name, price, desc, ingredients, image, available, out_of_stock, json.dumps(combo_product_ids), combo_allow_half))
+            INSERT INTO products (category_id, name, price, description, ingredients, image_url, available, out_of_stock, combo_product_ids, combo_product_discounts, combo_allow_half)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (category_id, name, price, desc, ingredients, image, available, out_of_stock, json.dumps(combo_product_ids), json.dumps(combo_product_discounts), combo_allow_half))
         product_id = cursor.lastrowid
     return next(item for item in admin_products() if item['id'] == product_id)
 
@@ -770,14 +786,14 @@ def update_product(product_id, payload):
     with db() as conn:
         if not conn.execute('SELECT id FROM products WHERE id = ?', (product_id,)).fetchone():
             return None
-        category_id, name, price, desc, ingredients, image, available, out_of_stock, combo_product_ids, combo_allow_half = product_payload(payload)
+        category_id, name, price, desc, ingredients, image, available, out_of_stock, combo_product_ids, combo_product_discounts, combo_allow_half = product_payload(payload)
         if not conn.execute('SELECT id FROM categories WHERE id = ?', (category_id,)).fetchone():
             raise ValueError('Categoria invalida')
         conn.execute('''
             UPDATE products
-            SET category_id = ?, name = ?, price = ?, description = ?, ingredients = ?, image_url = ?, available = ?, out_of_stock = ?, combo_product_ids = ?, combo_allow_half = ?
+            SET category_id = ?, name = ?, price = ?, description = ?, ingredients = ?, image_url = ?, available = ?, out_of_stock = ?, combo_product_ids = ?, combo_product_discounts = ?, combo_allow_half = ?
             WHERE id = ?
-        ''', (category_id, name, price, desc, ingredients, image, available, out_of_stock, json.dumps(combo_product_ids), combo_allow_half, product_id))
+        ''', (category_id, name, price, desc, ingredients, image, available, out_of_stock, json.dumps(combo_product_ids), json.dumps(combo_product_discounts), combo_allow_half, product_id))
     return next(item for item in admin_products() if item['id'] == product_id)
 
 def delete_product(product_id):
