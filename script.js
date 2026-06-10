@@ -1194,7 +1194,7 @@ async function toggleCategory(categoryId) {
 }
 
 async function deleteCategory(categoryId) {
-  if (!confirm('Excluir esta categoria definitivamente? Se houver produtos nela, mova ou exclua os produtos primeiro.')) return;
+  if (!confirm('Excluir esta categoria definitivamente? Isso tambem apaga os produtos cadastrados dentro dela.')) return;
   adminState.categories = await adminFetch(`/api/admin/categories/${categoryId}`, { method: 'DELETE' });
   await loadMenu();
   await loadAdminCatalog();

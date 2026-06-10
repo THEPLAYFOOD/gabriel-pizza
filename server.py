@@ -828,9 +828,30 @@ def update_category(category_id, payload):
 
 def delete_category(category_id):
     with db() as conn:
-        products_count = conn.execute('SELECT COUNT(*) AS total FROM products WHERE category_id = ?', (category_id,)).fetchone()['total']
-        if products_count:
-            raise ValueError('Esta categoria possui produtos vinculados. Mova, exclua ou oculte os produtos antes de excluir a categoria.')
+        category = conn.execute('SELECT id FROM categories WHERE id = ?', (category_id,)).fetchone()
+        if not category:
+            return False
+        product_rows = conn.execute('SELECT id FROM products WHERE category_id = ?', (category_id,)).fetchall()
+        product_ids = [int(row['id']) for row in product_rows]
+        if product_ids:
+            for combo in conn.execute('SELECT id, combo_product_ids FROM products WHERE combo_product_ids != ?', ('[]',)):
+                try:
+                    combo_ids = [int(item) for item in json.loads(combo['combo_product_ids'] or '[]')]
+                except Exception:
+                    combo_ids = []
+                updated_ids = [item for item in combo_ids if item not in product_ids]
+                if updated_ids != combo_ids and int(combo['id']) not in product_ids:
+                    conn.execute('UPDATE products SET combo_product_ids = ? WHERE id = ?', (json.dumps(updated_ids), combo['id']))
+            conn.commit()
+            conn.execute('PRAGMA foreign_keys = OFF')
+            try:
+                for product_id in product_ids:
+                    conn.execute('DELETE FROM products WHERE id = ?', (product_id,))
+                result = conn.execute('DELETE FROM categories WHERE id = ?', (category_id,))
+                conn.commit()
+                return result.rowcount > 0
+            finally:
+                conn.execute('PRAGMA foreign_keys = ON')
         result = conn.execute('DELETE FROM categories WHERE id = ?', (category_id,))
         return result.rowcount > 0
 
