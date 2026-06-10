@@ -606,7 +606,18 @@ def create_order(payload):
                 selected_flavors = [by_id[flavor_id] for flavor_id in flavor_ids]
                 if mode == 'half' and not any(flavor['category_allow_half'] or str(flavor['category']).startswith('Pizzas') for flavor in selected_flavors):
                     raise ValueError('Esta categoria nao permite meio a meio')
-                price = round(sum(float(flavor['price']) for flavor in selected_flavors) / len(selected_flavors), 2)
+                extras_total = 0
+                extra_ids = [item_id for item_id in combo_allowed_ids if item_id not in flavor_ids]
+                if extra_ids:
+                    extra_placeholders = ','.join('?' for _ in extra_ids)
+                    extras = conn.execute(f'''
+                        SELECT p.price
+                        FROM products p JOIN categories c ON c.id = p.category_id
+                        WHERE p.id IN ({extra_placeholders}) AND p.out_of_stock = 0 AND c.name NOT LIKE 'Pizzas%'
+                    ''', extra_ids).fetchall()
+                    extras_total = sum(float(extra['price']) for extra in extras)
+                pizza_average = sum(float(flavor['price']) for flavor in selected_flavors) / len(selected_flavors)
+                price = round(pizza_average + extras_total, 2)
                 if mode == 'half':
                     name = f"{combo['name']} - meio a meio: {by_id[flavor_ids[0]]['name']} / {by_id[flavor_ids[1]]['name']}"
                 else:

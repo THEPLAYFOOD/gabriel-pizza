@@ -144,7 +144,7 @@ function comboAllowsHalf(combo) {
 
 function comboIncludedGroups(combo) {
   if (!combo?.comboProductIds?.length) return '';
-  const selected = products.filter(product => combo.comboProductIds.includes(product.id) && !product.category.startsWith('Pizzas') && !product.outOfStock);
+  const selected = comboExtraProducts(combo);
   if (!selected.length) return '';
   const groups = selected.reduce((result, product) => {
     if (!result[product.category]) result[product.category] = [];
@@ -164,12 +164,19 @@ function comboIncludedGroups(combo) {
   `;
 }
 
+function comboExtraProducts(combo) {
+  if (!combo?.comboProductIds?.length) return [];
+  return products.filter(product => combo.comboProductIds.includes(product.id) && !product.category.startsWith('Pizzas') && !product.outOfStock);
+}
+
 function comboSelectionPrice(combo) {
   const flavorA = products.find(item => item.id === Number($('#detailFlavorA')?.value));
   const flavorB = products.find(item => item.id === Number($('#detailFlavorB')?.value));
   if (!flavorA) return Number(combo?.price || 0);
   const secondFlavor = comboAllowsHalf(combo) ? (flavorB || flavorA) : flavorA;
-  return Number((((Number(flavorA.price) || 0) + (Number(secondFlavor.price) || 0)) / 2).toFixed(2));
+  const pizzaAverage = ((Number(flavorA.price) || 0) + (Number(secondFlavor.price) || 0)) / 2;
+  const extrasTotal = comboExtraProducts(combo).reduce((total, product) => total + (Number(product.price) || 0), 0);
+  return Number((pizzaAverage + extrasTotal).toFixed(2));
 }
 
 function openProductDetail(productId) {
