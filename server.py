@@ -238,6 +238,7 @@ def send_security_email(email, code):
     user = os.environ.get('GABRIEL_SMTP_USER')
     password = os.environ.get('GABRIEL_SMTP_PASSWORD')
     if not host or not user or not password or password in {'sua-senha-de-app', 'COLOQUE_SUA_SENHA_DE_APP_AQUI'}:
+        print('SMTP not configured: missing host/user/password', flush=True)
         return False
     port = int(os.environ.get('GABRIEL_SMTP_PORT') or 587)
     sender = os.environ.get('GABRIEL_SMTP_FROM') or user
@@ -257,7 +258,7 @@ def send_security_email(email, code):
                 smtp.send_message(message)
             return True
         except Exception as error:
-            print(f'SMTP SSL error: {type(error).__name__}: {error}')
+            print(f'SMTP SSL error: {type(error).__name__}: {error}', flush=True)
             return False
     try:
         with smtplib.SMTP(host, port, timeout=15) as smtp:
@@ -266,7 +267,7 @@ def send_security_email(email, code):
             smtp.send_message(message)
         return True
     except Exception as error:
-        print(f'SMTP STARTTLS error: {type(error).__name__}: {error}')
+        print(f'SMTP STARTTLS error: {type(error).__name__}: {error}', flush=True)
     try:
         addresses = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
     except OSError:
@@ -293,7 +294,7 @@ def send_security_email(email, code):
             smtp.quit()
             return True
         except Exception:
-            print('SMTP IPv4 fallback failed')
+            print('SMTP IPv4 fallback failed', flush=True)
             try:
                 if smtp:
                     smtp.close()
@@ -304,6 +305,7 @@ def send_security_email(email, code):
 def request_admin_password_code(payload):
     email = str(payload.get('email') or '').strip().lower()
     credentials = admin_credentials()
+    print(f'Password recovery requested for {email}', flush=True)
     if email != credentials['email'].lower():
         raise ValueError('E-mail administrativo nao encontrado')
     code = f"{random.randint(0, 999999):06d}"
@@ -315,6 +317,7 @@ def request_admin_password_code(payload):
             (credentials['email'], code, expires_at)
         )
     email_sent = send_security_email(credentials['email'], code)
+    print(f'Password recovery emailSent={email_sent}', flush=True)
     response = {'ok': True, 'email': credentials['email'], 'emailSent': email_sent}
     if not email_sent:
         response['message'] = 'Nao foi possivel enviar o codigo por e-mail. Confira as variaveis SMTP no Render.'
