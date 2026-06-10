@@ -553,7 +553,7 @@ function validateCheckout() {
 function openWhatsappWithOrder(savedOrder) {
   const text = buildWhatsappText(savedOrder);
   const phone = String(store.phone || '5588992258066').replace(/\D/g, '');
-  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+  window.location.href = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 }
 
 function showPixStep() {
@@ -616,17 +616,27 @@ async function copyPixKey() {
 }
 
 async function finishWhatsappOrder() {
-  const button = $('#sendOrder');
+  const button = $('#pixStep [data-continue-pix]') || $('#sendOrder');
   const originalText = button.textContent;
   button.textContent = 'Salvando pedido...';
   button.disabled = true;
   try {
     const savedOrder = await saveOrder();
+    const message = $('#pixMessage');
+    if (message) {
+      message.textContent = `Pedido ${savedOrder.id} registrado. Abrindo WhatsApp...`;
+      message.className = 'admin-message ok';
+    }
     openWhatsappWithOrder(savedOrder);
     closePixStep();
-    alert(`Pedido ${savedOrder.id} registrado no backend.`);
   } catch (error) {
-    alert(error.message);
+    const message = $('#pixMessage');
+    if (message) {
+      message.textContent = error.message;
+      message.className = 'admin-message error';
+    } else {
+      alert(error.message);
+    }
   } finally {
     button.textContent = originalText;
     button.disabled = false;
