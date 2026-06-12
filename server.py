@@ -81,7 +81,7 @@ def translate_pg_sql(sql):
     sql = re.sub(r'INSERT\s+OR\s+IGNORE\s+INTO', 'INSERT INTO', sql, flags=re.I)
     if insert_ignore and 'ON CONFLICT' not in sql.upper() and 'RETURNING' not in sql.upper():
         sql = f'{sql} ON CONFLICT DO NOTHING'
-    return sql.replace('?', '%s')
+    return sql.replace('%', '%%').replace('?', '%s')
 
 class PostgresConnection:
     def __init__(self):
